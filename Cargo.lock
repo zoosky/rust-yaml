@@ -1175,6 +1175,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "yaml-test-suite"
+version = "0.0.0"
+dependencies = [
+ "rust-yaml",
+]
+
+[[package]]
 name = "yansi"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

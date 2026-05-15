@@ -2,8 +2,8 @@
 name = "rust-yaml"
 version = "0.0.5"
 authors = ["Elio Severo Junior <elioseverojunior@gmail.com>"]
-edition = "2021"
-rust-version = "1.85.0"
+edition = "2024"
+rust-version = "1.85"
 description = "A fast, safe YAML 1.2 library for Rust"
 documentation = "https://docs.rs/rust-yaml"
 readme = "README.md"
@@ -35,6 +35,7 @@ exclude = [
   ".gitignore",
   ".gitlab-ci.yml",
   ".gitmessage",
+  ".gitmodules",
   ".idea/",
   ".markdownlint.json",
   ".nvmrc",
@@ -65,10 +66,15 @@ exclude = [
   "target/",
   # Test files (tests/ should be included for cargo test)
   "test-data/",
+  # External conformance corpus lives in the dev-only `yaml-test-suite`
+  # workspace member (publish = false there), so no exclude entry is needed.
 
   # Examples (optional, you might want to include these)
   # "examples/",
 ]
+
+[workspace]
+members = ["yaml-test-suite"]
 
 [package.metadata.docs.rs]
 # Build docs with all features on docs.rs

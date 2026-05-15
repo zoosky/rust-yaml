@@ -1,7 +1,7 @@
 # Makefile for rust-yaml project
 # Consolidates development scripts and common commands
 
-.PHONY: help setup clean test lint format doc bench audit coverage release check-all dev-setup
+.PHONY: help setup clean test lint format doc bench audit coverage release check-all dev-setup test-yaml-suite test-yaml-suite-regen
 
 # Default target
 help: ## Show this help message
@@ -102,6 +102,11 @@ test-security: ## Run security-specific tests
 	@echo "🔒 Running security tests..."
 	@timeout 30s cargo test --test security_limits
 	@timeout 30s cargo test test_nested_alias_expansion_limit
+
+test-yaml-suite: ## Run upstream yaml-test-suite conformance harness
+	@echo "🧪 Running yaml/yaml-test-suite conformance harness..."
+	@git submodule update --init --recursive yaml-test-suite/data
+	@timeout 300s cargo test -p yaml-test-suite -- --nocapture
 
 # Code Quality
 format: ## Format code

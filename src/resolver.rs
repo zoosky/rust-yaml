@@ -1,6 +1,60 @@
 //! YAML resolver for tag resolution and implicit typing
 
+use crate::version::YamlVersion;
 use std::collections::HashMap;
+
+/// Result of resolving a plain (unquoted) scalar to a YAML type.
+///
+/// This is used by every composer variant to share implicit-resolution
+/// logic. Each composer maps the variants to its own value type.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PlainScalarType {
+    /// Null (`null`, `Null`, `NULL`, `~`).
+    Null,
+    /// Boolean — under YAML 1.2 only `true`/`false` (any case); under
+    /// YAML 1.1 also `yes`/`no`/`on`/`off`.
+    Bool(bool),
+    /// 64-bit signed integer (decimal).
+    Int(i64),
+    /// 64-bit float.
+    Float(f64),
+    /// Falls through to a string — the caller keeps the original input.
+    Str,
+}
+
+/// Resolve a plain scalar to a [`PlainScalarType`] under the given
+/// YAML version.
+///
+/// This is the single source of truth for implicit scalar typing.
+/// Composers call it instead of duplicating the resolution sequence.
+///
+/// Empty plain scalars currently fall through to `Str` to preserve
+/// existing rust-yaml behavior; the YAML 1.2 spec treats them as `Null`,
+/// which is tracked as a separate Core Schema gap.
+#[must_use]
+pub fn resolve_plain_scalar(value: &str, version: YamlVersion) -> PlainScalarType {
+    if value.is_empty() {
+        return PlainScalarType::Str;
+    }
+
+    if let Ok(i) = value.parse::<i64>() {
+        return PlainScalarType::Int(i);
+    }
+
+    if let Ok(f) = value.parse::<f64>() {
+        return PlainScalarType::Float(f);
+    }
+
+    let lower = value.to_lowercase();
+    match lower.as_str() {
+        "true" => PlainScalarType::Bool(true),
+        "false" => PlainScalarType::Bool(false),
+        "null" | "~" => PlainScalarType::Null,
+        "yes" | "on" if version == YamlVersion::V1_1 => PlainScalarType::Bool(true),
+        "no" | "off" if version == YamlVersion::V1_1 => PlainScalarType::Bool(false),
+        _ => PlainScalarType::Str,
+    }
+}
 
 /// Trait for YAML resolvers that handle tag resolution
 pub trait Resolver {
@@ -111,6 +165,99 @@ impl Resolver for BasicResolver {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn plain_scalar_decimal_int() {
+        assert_eq!(
+            resolve_plain_scalar("42", YamlVersion::V1_2),
+            PlainScalarType::Int(42)
+        );
+        assert_eq!(
+            resolve_plain_scalar("-7", YamlVersion::V1_2),
+            PlainScalarType::Int(-7)
+        );
+    }
+
+    #[test]
+    fn plain_scalar_float() {
+        assert_eq!(
+            resolve_plain_scalar("3.14", YamlVersion::V1_2),
+            PlainScalarType::Float(3.14)
+        );
+    }
+
+    #[test]
+    fn plain_scalar_bool_1_2_only_true_false() {
+        assert_eq!(
+            resolve_plain_scalar("true", YamlVersion::V1_2),
+            PlainScalarType::Bool(true)
+        );
+        assert_eq!(
+            resolve_plain_scalar("TRUE", YamlVersion::V1_2),
+            PlainScalarType::Bool(true)
+        );
+        assert_eq!(
+            resolve_plain_scalar("False", YamlVersion::V1_2),
+            PlainScalarType::Bool(false)
+        );
+    }
+
+    #[test]
+    fn plain_scalar_bool_1_2_rejects_yes_no_on_off() {
+        for s in ["yes", "no", "on", "off", "Yes", "NO", "On", "OFF"] {
+            assert_eq!(
+                resolve_plain_scalar(s, YamlVersion::V1_2),
+                PlainScalarType::Str,
+                "{s:?} should fall through to Str under 1.2"
+            );
+        }
+    }
+
+    #[test]
+    fn plain_scalar_bool_1_1_accepts_yes_no_on_off() {
+        assert_eq!(
+            resolve_plain_scalar("yes", YamlVersion::V1_1),
+            PlainScalarType::Bool(true)
+        );
+        assert_eq!(
+            resolve_plain_scalar("no", YamlVersion::V1_1),
+            PlainScalarType::Bool(false)
+        );
+        assert_eq!(
+            resolve_plain_scalar("on", YamlVersion::V1_1),
+            PlainScalarType::Bool(true)
+        );
+        assert_eq!(
+            resolve_plain_scalar("off", YamlVersion::V1_1),
+            PlainScalarType::Bool(false)
+        );
+    }
+
+    #[test]
+    fn plain_scalar_null_any_version() {
+        for v in [YamlVersion::V1_1, YamlVersion::V1_2] {
+            assert_eq!(resolve_plain_scalar("null", v), PlainScalarType::Null);
+            assert_eq!(resolve_plain_scalar("Null", v), PlainScalarType::Null);
+            assert_eq!(resolve_plain_scalar("NULL", v), PlainScalarType::Null);
+            assert_eq!(resolve_plain_scalar("~", v), PlainScalarType::Null);
+        }
+    }
+
+    #[test]
+    fn plain_scalar_string_fallback() {
+        assert_eq!(
+            resolve_plain_scalar("hello", YamlVersion::V1_2),
+            PlainScalarType::Str
+        );
+        assert_eq!(
+            resolve_plain_scalar("=", YamlVersion::V1_2),
+            PlainScalarType::Str
+        );
+        assert_eq!(
+            resolve_plain_scalar("=", YamlVersion::V1_1),
+            PlainScalarType::Str
+        );
+    }
 
     #[test]
     fn test_resolver_creation() {

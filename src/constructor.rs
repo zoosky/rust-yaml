@@ -385,20 +385,48 @@ mod tests {
     }
 
     #[test]
-    fn test_boolean_values() {
-        let test_cases = vec![
+    fn test_boolean_values_yaml_1_2() {
+        // Default (YAML 1.2): only true/false (any case) are booleans.
+        for (input, expected) in [
             ("true", true),
+            ("True", true),
+            ("TRUE", true),
             ("false", false),
-            ("yes", true),
-            ("no", false),
-            ("on", true),
-            ("off", false),
-        ];
-
-        for (input, expected) in test_cases {
+            ("False", false),
+            ("FALSE", false),
+        ] {
             let mut constructor = SafeConstructor::new(input.to_string());
             let result = constructor.construct().unwrap().unwrap();
             assert_eq!(result, Value::Bool(expected), "Failed for input: {}", input);
+        }
+    }
+
+    #[test]
+    fn test_boolean_values_1_2_rejects_yaml_1_1_forms() {
+        // Under YAML 1.2 (default), yes/no/on/off are strings, not booleans.
+        for input in ["yes", "no", "on", "off", "Yes", "No", "ON", "OFF"] {
+            let mut constructor = SafeConstructor::new(input.to_string());
+            let result = constructor.construct().unwrap().unwrap();
+            assert_eq!(
+                result,
+                Value::String(input.to_string()),
+                "{input:?} should be a string under YAML 1.2"
+            );
+        }
+    }
+
+    #[test]
+    fn test_boolean_values_yaml_1_1_directive() {
+        // With %YAML 1.1, the 1.1 boolean forms come back.
+        for (form, expected) in [("yes", true), ("no", false), ("on", true), ("off", false)] {
+            let input = format!("%YAML 1.1\n---\n{form}\n");
+            let mut constructor = SafeConstructor::new(input.clone());
+            let result = constructor.construct().unwrap().unwrap();
+            assert_eq!(
+                result,
+                Value::Bool(expected),
+                "Failed for 1.1 directive + {form:?}: {input:?}"
+            );
         }
     }
 

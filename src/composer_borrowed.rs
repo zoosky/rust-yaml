@@ -67,6 +67,8 @@ pub struct ZeroCopyComposer<'a> {
     current_depth: usize,
     /// Reference to the input string for borrowing
     input: &'a str,
+    /// Active YAML spec version for the current document.
+    yaml_version: crate::version::YamlVersion,
 }
 
 impl<'a> ZeroCopyComposer<'a> {
@@ -86,6 +88,7 @@ impl<'a> ZeroCopyComposer<'a> {
             alias_expansion_stack: Vec::new(),
             current_depth: 0,
             input,
+            yaml_version: crate::version::YamlVersion::default(),
         }
     }
 
@@ -218,42 +221,22 @@ impl<'a> ZeroCopyComposer<'a> {
         value: &str,
         style: ScalarStyle,
     ) -> Result<BorrowedValue<'a>> {
-        // If explicitly quoted, always treat as string
-        match style {
-            ScalarStyle::SingleQuoted | ScalarStyle::DoubleQuoted => {
-                // For now, use owned strings to avoid unsafe code
-                // In a production implementation, we'd use an arena allocator
-                return Ok(BorrowedValue::owned_string(value.to_string()));
-            }
-            _ => {}
-        }
-
-        // Type resolution for unquoted scalars
-        if value.is_empty() {
+        // Explicitly-quoted scalars are always strings.
+        if matches!(style, ScalarStyle::SingleQuoted | ScalarStyle::DoubleQuoted) {
             return Ok(BorrowedValue::owned_string(value.to_string()));
         }
 
-        // Try integer parsing
-        if let Ok(int_value) = value.parse::<i64>() {
-            return Ok(BorrowedValue::Int(int_value));
-        }
-
-        // Try float parsing
-        if let Ok(float_value) = value.parse::<f64>() {
-            return Ok(BorrowedValue::Float(float_value));
-        }
-
-        // Try boolean parsing
-        match value.to_lowercase().as_str() {
-            "true" | "yes" | "on" => return Ok(BorrowedValue::Bool(true)),
-            "false" | "no" | "off" => return Ok(BorrowedValue::Bool(false)),
-            "null" | "~" => return Ok(BorrowedValue::Null),
-            _ => {}
-        }
-
-        // Default to string - for now use owned to avoid unsafe
-
-        Ok(BorrowedValue::owned_string(value.to_string()))
+        Ok(
+            match crate::resolver::resolve_plain_scalar(value, self.yaml_version) {
+                crate::resolver::PlainScalarType::Null => BorrowedValue::Null,
+                crate::resolver::PlainScalarType::Bool(b) => BorrowedValue::Bool(b),
+                crate::resolver::PlainScalarType::Int(i) => BorrowedValue::Int(i),
+                crate::resolver::PlainScalarType::Float(f) => BorrowedValue::Float(f),
+                crate::resolver::PlainScalarType::Str => {
+                    BorrowedValue::owned_string(value.to_string())
+                }
+            },
+        )
     }
 
     /// Compose a sequence with minimal allocations
@@ -346,9 +329,12 @@ impl<'a> BorrowedComposer<'a> for ZeroCopyComposer<'a> {
             return Err(error);
         }
 
-        // Skip any leading document start events
+        // Consume document start events, capturing the YAML version directive.
         while let Ok(Some(event)) = self.parser.peek_event() {
-            if matches!(event.event_type, EventType::DocumentStart { .. }) {
+            if let EventType::DocumentStart { version, .. } = &event.event_type {
+                self.yaml_version = version
+                    .map(|(maj, min)| crate::version::YamlVersion::from_directive(maj, min))
+                    .unwrap_or_default();
                 self.parser.get_event()?;
             } else {
                 break;

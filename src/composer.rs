@@ -1,8 +1,10 @@
 //! YAML composer for converting events to nodes
 
+use crate::resolver::{resolve_plain_scalar, PlainScalarType};
 #[cfg(test)]
 use crate::scanner::Scanner;
 use crate::tag::TagResolver;
+use crate::version::YamlVersion;
 use crate::{
     parser::EventType, BasicParser, Error, Limits, Parser, Position, ResourceTracker, Result, Value,
 };
@@ -87,6 +89,10 @@ pub struct BasicComposer {
     alias_expansion_stack: Vec<String>,
     current_depth: usize,
     tag_resolver: TagResolver,
+    /// Active YAML spec version for the current document, set from the
+    /// `%YAML` directive (when present) on each `DocumentStart` event.
+    /// Defaults to [`YamlVersion::V1_2`].
+    yaml_version: YamlVersion,
 }
 
 impl BasicComposer {
@@ -108,6 +114,7 @@ impl BasicComposer {
             alias_expansion_stack: Vec::new(),
             current_depth: 0,
             tag_resolver: TagResolver::new(),
+            yaml_version: YamlVersion::default(),
         }
     }
 
@@ -129,6 +136,7 @@ impl BasicComposer {
             alias_expansion_stack: Vec::new(),
             current_depth: 0,
             tag_resolver: TagResolver::new(),
+            yaml_version: YamlVersion::default(),
         }
     }
 
@@ -150,8 +158,15 @@ impl BasicComposer {
                 self.compose_node()
             }
 
-            EventType::DocumentStart { .. } => {
-                // Skip document start events, these should be handled by compose_document
+            EventType::DocumentStart { version, .. } => {
+                // Capture the YAML version directive (if any) so plain-scalar
+                // resolution in compose_scalar honors `%YAML 1.1`. The
+                // compose_document peek loop also extracts it for the
+                // implicit-StreamStart case, but reach this arm when events
+                // are consumed via compose_node directly.
+                self.yaml_version = version
+                    .map(|(maj, min)| YamlVersion::from_directive(maj, min))
+                    .unwrap_or_default();
                 self.compose_node()
             }
 
@@ -279,43 +294,27 @@ impl BasicComposer {
         }
     }
 
-    /// Compose a scalar value
+    /// Compose a scalar value.
+    ///
+    /// Single- and double-quoted scalars always become `Value::String`.
+    /// Plain, literal, and folded scalars go through the shared
+    /// [`resolve_plain_scalar`] helper so the YAML version (1.1 vs 1.2)
+    /// governs which boolean forms are recognized.
     fn compose_scalar(&self, value: String, style: crate::parser::ScalarStyle) -> Result<Value> {
-        // If explicitly quoted (single or double quotes), always treat as string
         match style {
             crate::parser::ScalarStyle::SingleQuoted | crate::parser::ScalarStyle::DoubleQuoted => {
                 return Ok(Value::String(value));
             }
-            _ => {
-                // Continue with implicit type resolution for plain, literal, and folded styles
-            }
-        }
-
-        // For now, do basic type resolution
-        if value.is_empty() {
-            return Ok(Value::String(value));
-        }
-
-        // Try integer parsing
-        if let Ok(int_value) = value.parse::<i64>() {
-            return Ok(Value::Int(int_value));
-        }
-
-        // Try float parsing
-        if let Ok(float_value) = value.parse::<f64>() {
-            return Ok(Value::Float(float_value));
-        }
-
-        // Try boolean parsing
-        match value.to_lowercase().as_str() {
-            "true" | "yes" | "on" => return Ok(Value::Bool(true)),
-            "false" | "no" | "off" => return Ok(Value::Bool(false)),
-            "null" | "~" => return Ok(Value::Null),
             _ => {}
         }
 
-        // Default to string
-        Ok(Value::String(value))
+        Ok(match resolve_plain_scalar(&value, self.yaml_version) {
+            PlainScalarType::Null => Value::Null,
+            PlainScalarType::Bool(b) => Value::Bool(b),
+            PlainScalarType::Int(i) => Value::Int(i),
+            PlainScalarType::Float(f) => Value::Float(f),
+            PlainScalarType::Str => Value::String(value),
+        })
     }
 
     /// Compose a tagged scalar value
@@ -483,9 +482,14 @@ impl Composer for BasicComposer {
             return Err(error);
         }
 
-        // Process document start events and extract tag directives
+        // Process document start events and extract tag directives + YAML version.
         while let Ok(Some(event)) = self.parser.peek_event() {
-            if let EventType::DocumentStart { tags, .. } = &event.event_type {
+            if let EventType::DocumentStart { tags, version, .. } = &event.event_type {
+                // Reset YAML version per document (directives don't carry across).
+                self.yaml_version = version
+                    .map(|(maj, min)| YamlVersion::from_directive(maj, min))
+                    .unwrap_or_default();
+
                 // Clear previous document's tag directives
                 self.tag_resolver.clear_directives();
 

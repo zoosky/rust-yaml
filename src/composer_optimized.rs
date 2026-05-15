@@ -66,6 +66,8 @@ pub struct ReducedAllocComposer {
     resource_tracker: ResourceTracker,
     alias_expansion_stack: Vec<String>,
     current_depth: usize,
+    /// Active YAML spec version for the current document.
+    yaml_version: crate::version::YamlVersion,
 }
 
 impl ReducedAllocComposer {
@@ -84,6 +86,7 @@ impl ReducedAllocComposer {
             resource_tracker: ResourceTracker::new(),
             alias_expansion_stack: Vec::new(),
             current_depth: 0,
+            yaml_version: crate::version::YamlVersion::default(),
         }
     }
 
@@ -220,39 +223,19 @@ impl ReducedAllocComposer {
         value: String,
         style: ScalarStyle,
     ) -> Result<OptimizedValue> {
-        // If explicitly quoted, always treat as string
-        match style {
-            ScalarStyle::SingleQuoted | ScalarStyle::DoubleQuoted => {
-                return Ok(OptimizedValue::string(value));
-            }
-            _ => {}
-        }
-
-        // Type resolution for unquoted scalars
-        if value.is_empty() {
+        if matches!(style, ScalarStyle::SingleQuoted | ScalarStyle::DoubleQuoted) {
             return Ok(OptimizedValue::string(value));
         }
 
-        // Try integer parsing
-        if let Ok(int_value) = value.parse::<i64>() {
-            return Ok(OptimizedValue::Int(int_value));
-        }
-
-        // Try float parsing
-        if let Ok(float_value) = value.parse::<f64>() {
-            return Ok(OptimizedValue::Float(float_value));
-        }
-
-        // Try boolean parsing
-        match value.to_lowercase().as_str() {
-            "true" | "yes" | "on" => return Ok(OptimizedValue::Bool(true)),
-            "false" | "no" | "off" => return Ok(OptimizedValue::Bool(false)),
-            "null" | "~" => return Ok(OptimizedValue::Null),
-            _ => {}
-        }
-
-        // Default to string
-        Ok(OptimizedValue::string(value))
+        Ok(
+            match crate::resolver::resolve_plain_scalar(&value, self.yaml_version) {
+                crate::resolver::PlainScalarType::Null => OptimizedValue::Null,
+                crate::resolver::PlainScalarType::Bool(b) => OptimizedValue::Bool(b),
+                crate::resolver::PlainScalarType::Int(i) => OptimizedValue::Int(i),
+                crate::resolver::PlainScalarType::Float(f) => OptimizedValue::Float(f),
+                crate::resolver::PlainScalarType::Str => OptimizedValue::string(value),
+            },
+        )
     }
 
     /// Compose a sequence with reduced allocations
@@ -397,9 +380,12 @@ impl OptimizedComposer for ReducedAllocComposer {
             return Err(error);
         }
 
-        // Skip any leading document start events
+        // Consume document start events, capturing the YAML version directive.
         while let Ok(Some(event)) = self.parser.peek_event() {
-            if matches!(event.event_type, EventType::DocumentStart { .. }) {
+            if let EventType::DocumentStart { version, .. } = &event.event_type {
+                self.yaml_version = version
+                    .map(|(maj, min)| crate::version::YamlVersion::from_directive(maj, min))
+                    .unwrap_or_default();
                 self.parser.get_event()?;
             } else {
                 break;

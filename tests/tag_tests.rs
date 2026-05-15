@@ -242,18 +242,36 @@ fn test_invalid_tag_error() {
 
 #[test]
 fn test_schema_validation() {
-    // Test Core schema vs JSON schema differences
-    // In Core schema, "yes" is a boolean, in JSON schema it's a string
-
-    // Default should use Core schema
+    // YAML 1.2 Core Schema does NOT recognize `yes`/`no` as booleans — those
+    // were dropped in 1.2. The 1.2.2 spec's bool form is `true`/`false` only.
     let yaml = Yaml::new();
-    let result = yaml.load_str("yes").unwrap();
-    assert_eq!(result, Value::Bool(true));
+    assert_eq!(
+        yaml.load_str("yes").unwrap(),
+        Value::String("yes".to_string()),
+        "1.2 default: yes is a string"
+    );
+    assert_eq!(
+        yaml.load_str("true").unwrap(),
+        Value::Bool(true),
+        "1.2 default: true is bool"
+    );
+
+    // With `%YAML 1.1`, legacy bool forms come back.
+    assert_eq!(
+        yaml.load_str("%YAML 1.1\n---\nyes\n").unwrap(),
+        Value::Bool(true),
+        "%YAML 1.1: yes is bool"
+    );
+    assert_eq!(
+        yaml.load_str("%YAML 1.1\n---\nno\n").unwrap(),
+        Value::Bool(false),
+        "%YAML 1.1: no is bool"
+    );
 
     // TODO: Add JSON schema mode when implemented
     // let yaml = Yaml::with_schema(Schema::Json);
-    // let result = yaml.load_str("yes").unwrap();
-    // assert_eq!(result, Value::String("yes".to_string()));
+    // let result = yaml.load_str("true").unwrap();
+    // assert_eq!(result, Value::String("true".to_string()));
 }
 
 #[test]

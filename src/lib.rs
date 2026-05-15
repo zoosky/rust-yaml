@@ -94,6 +94,7 @@ pub mod streaming_enhanced;
 pub mod tag;
 pub mod value;
 pub mod value_borrowed;
+pub mod version;
 pub mod yaml;
 pub mod zero_copy_value;
 pub mod zerocopy;
@@ -124,12 +125,13 @@ pub use parser::{
     BasicParser, Event, EventType, Parser, StreamingConfig, StreamingParser, StreamingStats,
 };
 pub use representer::{Representer, SafeRepresenter};
-pub use resolver::{BasicResolver, Resolver};
+pub use resolver::{resolve_plain_scalar, BasicResolver, PlainScalarType, Resolver};
 pub use scanner::{BasicScanner, Scanner, Token, TokenType};
 pub use serializer::{BasicSerializer, Serializer};
 pub use streaming_enhanced::{
     stream_from_file, stream_from_string, StreamConfig, StreamingYamlParser,
 };
+pub use version::YamlVersion;
 pub use zerocopy::{ScannerStats, TokenPool, ZeroScanner, ZeroString, ZeroToken, ZeroTokenType};
 // pub use profiling::{YamlProfiler, StringInterner, ObjectPool}; // Temporarily disabled
 

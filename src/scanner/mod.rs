@@ -534,21 +534,16 @@ impl BasicScanner {
         matches!(value, "null" | "Null" | "NULL" | "~" | "")
     }
 
-    /// Normalize a scalar value based on YAML rules
+    /// Normalize a scalar value based on YAML rules.
+    ///
+    /// The scanner preserves the original text of plain scalars. Type
+    /// resolution (including version-aware bool/null mapping) happens in
+    /// the composer (see `crate::resolver::resolve_plain_scalar`). This
+    /// preserves enough information for the composer to apply the
+    /// YAML 1.1 vs 1.2 distinction and for round-trip emitters to
+    /// recover the original spelling.
     fn normalize_scalar(value: String) -> String {
-        if Self::is_yaml_bool(&value) {
-            // Normalize booleans to lowercase
-            match value.to_lowercase().as_str() {
-                "true" | "yes" | "on" => "true".to_string(),
-                "false" | "no" | "off" => "false".to_string(),
-                _ => value,
-            }
-        } else if Self::is_yaml_null(&value) {
-            // Normalize nulls to empty string (will be handled by parser)
-            "null".to_string()
-        } else {
-            value
-        }
+        value
     }
 
     /// Scan a number token

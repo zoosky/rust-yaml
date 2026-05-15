@@ -21,6 +21,8 @@ pub struct CommentPreservingComposer {
     comment_map: HashMap<Position, String>,
     /// Stack of pending comments that might belong to the next value
     pending_comments: Vec<String>,
+    /// Active YAML spec version for the current document.
+    yaml_version: crate::version::YamlVersion,
 }
 
 impl CommentPreservingComposer {
@@ -45,6 +47,7 @@ impl CommentPreservingComposer {
             alias_expansion_stack: Vec::new(),
             comment_map: HashMap::new(),
             pending_comments: Vec::new(),
+            yaml_version: crate::version::YamlVersion::default(),
         }
     }
 
@@ -142,8 +145,15 @@ impl CommentPreservingComposer {
                 // Skip structural events and try next
                 self.compose_node()
             }
-            EventType::DocumentStart { .. } | EventType::DocumentEnd { .. } => {
-                // Skip document markers and try next
+            EventType::DocumentStart { version, .. } => {
+                // Capture the YAML version directive (if any) before recursing.
+                self.yaml_version = version
+                    .map(|(maj, min)| crate::version::YamlVersion::from_directive(maj, min))
+                    .unwrap_or_default();
+                self.compose_node()
+            }
+            EventType::DocumentEnd { .. } => {
+                // Skip document end and try next
                 self.compose_node()
             }
             EventType::SequenceEnd | EventType::MappingEnd => {
@@ -181,33 +191,15 @@ impl CommentPreservingComposer {
         Ok(Some(commented_value))
     }
 
-    /// Resolve scalar type from string value
+    /// Resolve scalar type from string value (version-aware).
     fn resolve_scalar_type(&self, value: String) -> Value {
-        // Empty string
-        if value.is_empty() {
-            return Value::String(value);
+        match crate::resolver::resolve_plain_scalar(&value, self.yaml_version) {
+            crate::resolver::PlainScalarType::Null => Value::Null,
+            crate::resolver::PlainScalarType::Bool(b) => Value::Bool(b),
+            crate::resolver::PlainScalarType::Int(i) => Value::Int(i),
+            crate::resolver::PlainScalarType::Float(f) => Value::Float(f),
+            crate::resolver::PlainScalarType::Str => Value::String(value),
         }
-
-        // Try integer parsing
-        if let Ok(int_value) = value.parse::<i64>() {
-            return Value::Int(int_value);
-        }
-
-        // Try float parsing
-        if let Ok(float_value) = value.parse::<f64>() {
-            return Value::Float(float_value);
-        }
-
-        // Try boolean parsing
-        match value.to_lowercase().as_str() {
-            "true" | "yes" | "on" => return Value::Bool(true),
-            "false" | "no" | "off" => return Value::Bool(false),
-            "null" | "~" => return Value::Null,
-            _ => {}
-        }
-
-        // Default to string
-        Value::String(value)
     }
 
     /// Compose a sequence

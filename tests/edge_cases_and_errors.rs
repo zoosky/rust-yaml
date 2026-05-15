@@ -255,48 +255,66 @@ fn test_edge_case_numbers() {
 #[test]
 fn test_boolean_edge_cases() {
     let yaml = Yaml::new();
-    let true_values = [
-        "true", "True", "TRUE", "yes", "Yes", "YES", "on", "On", "ON",
-    ];
-    let false_values = [
-        "false", "False", "FALSE", "no", "No", "NO", "off", "Off", "OFF",
-    ];
 
-    for true_val in true_values {
-        let input = format!("test: {}", true_val);
-        let result = yaml
-            .load_str(&input)
-            .expect(&format!("Should parse boolean: {}", input));
+    // YAML 1.2 (default): only `true`/`false` (any case) are booleans.
+    let true_values_1_2 = ["true", "True", "TRUE"];
+    let false_values_1_2 = ["false", "False", "FALSE"];
 
+    for v in true_values_1_2 {
+        let input = format!("test: {v}");
+        let result = yaml.load_str(&input).expect(&format!("parse {input}"));
         if let Value::Mapping(ref map) = result {
-            let value = map
-                .get(&Value::String("test".to_string()))
-                .expect("Should find test key");
-            assert_eq!(
-                value,
-                &Value::Bool(true),
-                "Should parse as true: {}",
-                true_val
-            );
+            let got = map.get(&Value::String("test".to_string())).unwrap();
+            assert_eq!(got, &Value::Bool(true), "1.2 default: {v:?}");
+        }
+    }
+    for v in false_values_1_2 {
+        let input = format!("test: {v}");
+        let result = yaml.load_str(&input).expect(&format!("parse {input}"));
+        if let Value::Mapping(ref map) = result {
+            let got = map.get(&Value::String("test".to_string())).unwrap();
+            assert_eq!(got, &Value::Bool(false), "1.2 default: {v:?}");
         }
     }
 
-    for false_val in false_values {
-        let input = format!("test: {}", false_val);
-        let result = yaml
-            .load_str(&input)
-            .expect(&format!("Should parse boolean: {}", input));
-
+    // YAML 1.2 (default) treats yes/no/on/off as plain strings.
+    for v in ["yes", "no", "on", "off", "Yes", "NO", "On", "OFF"] {
+        let input = format!("test: {v}");
+        let result = yaml.load_str(&input).expect(&format!("parse {input}"));
         if let Value::Mapping(ref map) = result {
-            let value = map
-                .get(&Value::String("test".to_string()))
-                .expect("Should find test key");
+            let got = map.get(&Value::String("test".to_string())).unwrap();
             assert_eq!(
-                value,
-                &Value::Bool(false),
-                "Should parse as false: {}",
-                false_val
+                got,
+                &Value::String(v.to_string()),
+                "1.2 default treats {v:?} as string"
             );
+        }
+    }
+}
+
+#[test]
+fn test_boolean_edge_cases_yaml_1_1_directive() {
+    let yaml = Yaml::new();
+    // %YAML 1.1 brings yes/no/on/off back as booleans.
+    for (v, expected) in [
+        ("yes", true),
+        ("Yes", true),
+        ("YES", true),
+        ("on", true),
+        ("On", true),
+        ("ON", true),
+        ("no", false),
+        ("No", false),
+        ("NO", false),
+        ("off", false),
+        ("Off", false),
+        ("OFF", false),
+    ] {
+        let input = format!("%YAML 1.1\n---\ntest: {v}\n");
+        let result = yaml.load_str(&input).expect(&format!("parse {input}"));
+        if let Value::Mapping(ref map) = result {
+            let got = map.get(&Value::String("test".to_string())).unwrap();
+            assert_eq!(got, &Value::Bool(expected), "%YAML 1.1 + {v:?}");
         }
     }
 }

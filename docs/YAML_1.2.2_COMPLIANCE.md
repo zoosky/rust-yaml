@@ -31,7 +31,8 @@ It is **descriptive**, not aspirational: every entry below reflects the current 
 | Indentation (spaces only, no tabs) | ✅ | `src/scanner/indentation.rs` |
 | `# comment` | ✅ | `tests/comment_preservation_tests.rs` |
 | `%YAML version` directive parsed | ✅ | `src/parser/mod.rs:319` populates `yaml_version` |
-| `%YAML version` directive **honored** | ❌ | **Dead code**: `yaml_version` flows into `Event::DocumentStart` but no downstream consumer reads it. See [#10](../../issues/10). |
+| `%YAML 1.1` honored for bool resolution | ✅ | Composers read `Event::DocumentStart`'s version and call `resolver::resolve_plain_scalar(value, version)` (`src/composer.rs`, `composer_borrowed.rs`, `composer_comments.rs`, `composer_optimized.rs`). 1.1 enables `yes`/`no`/`on`/`off` as bools; 1.2 (default) does not. See `tests/directives.rs` `test_yaml_version_1_1_compatibility` and siblings. |
+| `%YAML 1.1` honored for `=` / `!!value` | ❌ | `=` still parses as `String("=")` even under 1.1. Tracked as a known gap below. |
 | `%TAG handle prefix` directive | ✅ | `tests/directives.rs`, `tests/directive_roundtrip.rs` |
 | Reserved directive handling | 🟡 | Other directives parse but are not strictly validated |
 
@@ -86,7 +87,7 @@ The table below was captured by parsing each input with `Yaml::new().load_str(..
 |---|---|---|---|
 | `null`, `~` | `Null` ✅ | `!!null` | Composer path |
 | `true` / `false` (any case) | `Bool` ✅ | `!!bool` | Composer matches case-insensitively |
-| `yes` / `no` / `on` / `off` | `Bool` ❌ | `!!str` | **Non-1.2 behavior** — composer applies YAML 1.1 bool forms unconditionally |
+| `yes` / `no` / `on` / `off` (no directive) | `String` ✅ | `!!str` | Fixed — composer reads `%YAML` version; `yes`/`no`/`on`/`off` only resolve as `Bool` under `%YAML 1.1` |
 | `42`, `-1` (decimal) | `Int` ✅ | `!!int` | `i64::parse` |
 | `0xFF` (hex) | `String` ❌ | `!!int` | Only works via `!!int 0xFF` (`src/tag.rs:249`) |
 | `0o17` (octal, 1.2 form) | `String` ❌ | `!!int` | Only works via `!!int 0o17` (`src/tag.rs:252`) |
@@ -97,12 +98,17 @@ The table below was captured by parsing each input with `Yaml::new().load_str(..
 | `.inf`, `-.inf`, `.nan` (spec forms) | `String` ❌ | `!!float` | Tagged construction works (`src/tag.rs:274-276`); implicit doesn't |
 | anything else | `String` ✅ | `!!str` | Default fallback |
 
-**Core Schema compliance gaps tracked in [#10](../../issues/10)**:
+**Remaining Core Schema compliance gaps**:
 
-1. Implicit hex / 1.2-octal integers (`0xFF`, `0o17`) resolve as strings.
-2. Spec float forms `.inf` / `.nan` resolve as strings while Rust forms `inf` / `nan` are wrongly resolved as floats.
-3. YAML 1.1 bool forms (`yes`/`no`/`on`/`off`) resolve as booleans with no awareness of the `%YAML` directive — strictly wrong for 1.2 documents.
-4. The `BasicResolver` / `TagResolver` implicit-resolution code (`src/resolver.rs:36-48`, `is_int`/`is_float`) is dead for untagged values; composers reimplement resolution inline. Consolidating these into a single version-aware path is part of [#10](../../issues/10).
+1. Implicit hex / 1.2-octal integers (`0xFF`, `0o17`) resolve as strings — tagged forms (`!!int 0xFF`) work.
+2. Spec float forms `.inf` / `.nan` resolve as strings while Rust forms `inf` / `nan` are wrongly resolved as floats — tagged forms work.
+3. The `BasicResolver` / `TagResolver` `implicit_resolvers` HashMap (`src/resolver.rs:36-48`) is still unused; the active resolution path is now `resolver::resolve_plain_scalar`, which is shared by all composers. The `BasicResolver` lookup map could be removed in a follow-up.
+
+**Resolved during [#10](../../issues/10)**:
+
+- Composer code-path consolidation: all four composers now share `resolver::resolve_plain_scalar`, eliminating four near-identical inline resolution blocks.
+- `%YAML 1.1` directive now governs bool resolution (`yes`/`no`/`on`/`off`).
+- Scanner no longer rewrites `yes` → the literal string `"true"` — plain-scalar text reaches the composer unchanged.
 
 ## YAML 1.1 compatibility
 
@@ -110,15 +116,16 @@ YAML 1.1 includes types and behaviors that the 1.2 spec **explicitly removed** f
 
 | 1.1 feature | 1.2 status | rust-yaml behavior |
 |---|---|---|
-| Boolean alternatives `yes/no/on/off` | Dropped (1.2 = `true`/`false` only) | ❌ Strictly wrong — composers (`src/composer.rs:310-313` and three siblings) match `yes/no/on/off` case-insensitively as `Bool`, regardless of `%YAML` version. Should only happen for 1.1 documents. `y` / `n` short forms are **not** recognized. |
-| Boolean short forms `y/n` | Dropped (1.2 = `true`/`false` only) | 🔵 Not recognized — even when document declares `%YAML 1.1`. |
+| Boolean alternatives `yes/no/on/off` | Dropped (1.2 = `true`/`false` only) | ✅ Directive-aware. Under default 1.2 (or `%YAML 1.2`), `yes`/`no`/`on`/`off` resolve as `String`. Under `%YAML 1.1`, they resolve as `Bool`. |
+| Boolean short forms `y/n` | Dropped (1.2 = `true`/`false` only) | 🔵 Not recognized in either version. |
 | Octal leading-zero `014` (= decimal 12 in 1.1) | Dropped (1.2 = `0o14`) | ❌ Resolved as decimal `Int(14)`, never as octal 12. Wrong for both 1.1 (should be 12) and arguably right for 1.2 (decimal interpretation matches `!!int`'s "implicit type implies decimal" rule). |
 | `!!value` tag and `=` value-key replacement | Dropped from 1.2 Core | 🔵 Not recognized — `=` parses as the literal string `"="`. Spec-compliant for 1.2.2; differs from `ruamel` ([#1](../../issues/1)). |
 | `!!merge` (`<<`) | Retained de facto | ✅ `tests/merge_keys.rs`, `tests/merge_keys_comprehensive.rs` |
 | `!!binary` | Retained, base64 | ✅ `src/tag.rs:291-318` (decodes to `String` or marker for non-UTF-8) |
 | `!!timestamp` | Retained, ISO 8601 | 🟡 Stub — `src/tag.rs:321-325` stores as `String("timestamp:<raw>")` |
 | `!!omap`, `!!pairs`, `!!set` | Retained in 1.2 type repository | ⏸ Recognized as tag names but mapped to default `Mapping` |
-| `%YAML 1.1` directive enables 1.1 semantics | — | ❌ Directive parsed but ignored (see Chapter 6 above) |
+| `%YAML 1.1` directive enables 1.1 bool resolution | — | ✅ Directive flows through `Event::DocumentStart` → composer → `resolver::resolve_plain_scalar`. See `tests/directives.rs::test_yaml_version_1_1_compatibility`. |
+| `%YAML 1.1` directive enables `!!value` / `=` | — | ❌ Not yet — `=` still resolves to `String` under 1.1 (deferred). |
 
 ## Engine features beyond pure spec compliance
 
@@ -137,10 +144,12 @@ These are `rust-yaml`-specific and not part of any spec-conformance level:
 
 ## Known gaps tracked separately
 
-- [#10](../../issues/10) — `%YAML 1.1` directive parsed but unused; downstream pipeline ignores `yaml_version`. Covers wiring + 1.1-aware bool/value-tag behavior + this doc.
 - The Core Schema implicit `int` resolver only recognizes decimals — hex/octal/binary forms only typed when explicitly tagged.
+- The Core Schema implicit `float` resolver uses Rust's `f64::parse` (accepts `inf`/`nan`), instead of the spec's `.inf`/`.nan` forms.
 - `!!timestamp` construction is a stub.
 - UTF-16/UTF-32 BOM detection at stream start.
+- `%YAML 1.1` directive does not yet enable `!!value` / `=` token construction. `=` always parses as `String`.
+- The `BasicResolver`'s `implicit_resolvers` HashMap is dead code now that `resolver::resolve_plain_scalar` is the single resolution path — candidate for removal in a follow-up.
 
 ## Maintaining this doc
 

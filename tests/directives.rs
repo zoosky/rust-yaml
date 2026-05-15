@@ -163,18 +163,131 @@ doc2: without_directives
 
 #[test]
 fn test_yaml_version_1_1_compatibility() {
-    // Test that we can at least parse YAML 1.1 directive
+    // Under %YAML 1.1, `yes`/`no` are booleans, not strings.
     let yaml_input = r#"%YAML 1.1
 ---
-# YAML 1.1 had different boolean representations
 yes: true
 no: false
 "#;
 
     let yaml = Yaml::new();
-    let result = yaml.load_str(yaml_input);
+    let result = yaml.load_str(yaml_input).expect("parse YAML 1.1 document");
 
-    assert!(result.is_ok(), "Should parse YAML 1.1 document");
+    let Value::Mapping(map) = result else {
+        panic!("expected mapping, got {result:?}");
+    };
+
+    // Both keys and values are booleans under 1.1.
+    let yes_val = map
+        .get(&Value::Bool(true))
+        .expect("`yes` key as Bool(true)");
+    assert_eq!(yes_val, &Value::Bool(true));
+    let no_val = map
+        .get(&Value::Bool(false))
+        .expect("`no` key as Bool(false)");
+    assert_eq!(no_val, &Value::Bool(false));
+    assert_eq!(map.len(), 2, "exactly two entries");
+}
+
+#[test]
+fn test_yaml_1_2_default_treats_legacy_bools_as_strings() {
+    // No %YAML directive => 1.2 semantics. yes/no are plain strings.
+    let yaml_input = "yes: hello\nno: world\n";
+
+    let yaml = Yaml::new();
+    let Value::Mapping(map) = yaml.load_str(yaml_input).expect("parse") else {
+        panic!("expected mapping");
+    };
+
+    assert_eq!(
+        map.get(&Value::String("yes".to_string())),
+        Some(&Value::String("hello".to_string())),
+        "`yes` is a string key under 1.2 default"
+    );
+    assert_eq!(
+        map.get(&Value::String("no".to_string())),
+        Some(&Value::String("world".to_string())),
+        "`no` is a string key under 1.2 default"
+    );
+    assert!(
+        map.get(&Value::Bool(true)).is_none(),
+        "no Bool(true) key should be created"
+    );
+}
+
+#[test]
+fn test_yaml_1_2_explicit_directive_keeps_1_2_semantics() {
+    // %YAML 1.2 is the spec default — yes/no should remain strings.
+    let yaml_input = "%YAML 1.2\n---\nyes: hi\n";
+
+    let yaml = Yaml::new();
+    let Value::Mapping(map) = yaml.load_str(yaml_input).expect("parse") else {
+        panic!("expected mapping");
+    };
+    assert_eq!(
+        map.get(&Value::String("yes".to_string())),
+        Some(&Value::String("hi".to_string())),
+        "%YAML 1.2 keeps `yes` as string"
+    );
+}
+
+#[test]
+fn test_yaml_version_directive_does_not_carry_across_documents() {
+    // Per YAML 1.2.2 spec §9.1.3, directives apply only to the document that
+    // follows them. A second document without a directive must use the
+    // default version (1.2).
+    let yaml_input = r#"%YAML 1.1
+---
+flag: yes
+---
+flag: yes
+"#;
+
+    let yaml = Yaml::new();
+    let docs = yaml
+        .load_all_str(yaml_input)
+        .expect("parse multi-doc stream");
+    assert_eq!(docs.len(), 2, "two documents in stream");
+
+    // Doc 1: %YAML 1.1 in effect, `yes` is bool.
+    let Value::Mapping(doc1) = &docs[0] else {
+        panic!("doc1 expected mapping");
+    };
+    assert_eq!(
+        doc1.get(&Value::String("flag".to_string())),
+        Some(&Value::Bool(true)),
+        "doc1 under 1.1: yes is Bool(true)"
+    );
+
+    // Doc 2: no directive => default 1.2, `yes` is string.
+    let Value::Mapping(doc2) = &docs[1] else {
+        panic!("doc2 expected mapping");
+    };
+    assert_eq!(
+        doc2.get(&Value::String("flag".to_string())),
+        Some(&Value::String("yes".to_string())),
+        "doc2 reverts to 1.2 default: yes is String"
+    );
+}
+
+#[test]
+fn test_yaml_1_1_value_tag_token_still_string_for_now() {
+    // The `=` value-key replacement token is a YAML 1.1 feature (`!!value`
+    // tag) that was dropped in 1.2. Full 1.1 construction of `=` is
+    // deferred — for now we just document the current behavior so a future
+    // implementer notices when this changes.
+    let yaml_input = "%YAML 1.1\n---\nitems:\n  - =\n";
+    let yaml = Yaml::new();
+    let result = yaml.load_str(yaml_input).expect("parse");
+    let Value::Mapping(map) = result else {
+        panic!("expected mapping");
+    };
+    let items = map.get(&Value::String("items".to_string())).expect("items");
+    assert_eq!(
+        items,
+        &Value::Sequence(vec![Value::String("=".to_string())]),
+        "`=` under 1.1 currently parses as String — full !!value handling tracked separately"
+    );
 }
 
 #[test]

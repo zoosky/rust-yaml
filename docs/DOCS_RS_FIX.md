@@ -8,7 +8,7 @@
 
 1. **Edition 2024 Issue (v0.0.1)**
    - Original version used `edition = "2024"` which may not be fully supported by docs.rs
-   - Fixed: Changed to `edition = "2021"` for better compatibility
+   - Fixed: Changed to `edition = "2024"` for better compatibility
 
 2. **Rust Version Requirement**
    - Current: `rust-version = "1.89.0"`
@@ -18,7 +18,7 @@
 ## Changes Made
 
 1. **Cargo.toml Updates**
-   - Changed `edition = "2024"` to `edition = "2021"`
+   - Changed `edition = "2024"` to `edition = "2024"`
    - Kept `rust-version = "1.89.0"` as it's compatible
    - docs.rs metadata configuration is already correct
 

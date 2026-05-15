@@ -96,6 +96,9 @@ name = "library_comparison"
 name = "merge_key_demo"
 
 [[example]]
+name = "round_trip"
+
+[[example]]
 name = "streaming_parser_demo"
 
 [[bench]]

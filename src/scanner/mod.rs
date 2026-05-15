@@ -66,6 +66,14 @@ pub struct BasicScanner {
     resource_tracker: ResourceTracker,
     // Track inline nested sequences that need closing
     inline_sequence_depth: usize,
+    // Track compact-notation sequences (where `-` is at the same indent as
+    // the parent mapping keys). These are NOT on indent_stack, so we need
+    // separate tracking to know when to emit BlockEnd for them.
+    compact_sequence_indents: Vec<usize>,
+    // Parallel to indent_stack: true when the entry was pushed by a block
+    // sequence, false when by a mapping. Lets us distinguish "continuing a
+    // regular sequence" from "starting a compact sequence at same indent".
+    indent_is_sequence: Vec<bool>,
 }
 
 impl BasicScanner {
@@ -109,6 +117,8 @@ impl BasicScanner {
                 limits,
                 resource_tracker,
                 inline_sequence_depth: 0,
+                compact_sequence_indents: Vec::new(),
+                indent_is_sequence: vec![false],
             };
         }
 
@@ -139,6 +149,8 @@ impl BasicScanner {
             limits,
             resource_tracker,
             inline_sequence_depth: 0,
+            compact_sequence_indents: Vec::new(),
+            indent_is_sequence: vec![false],
         }
     }
 
@@ -291,10 +303,37 @@ impl BasicScanner {
         // Update current indentation level
         self.current_indent = indent;
 
+        // Close compact-notation sequences whose scope ends at this line.
+        // A compact sequence (where `-` shares the indent of the parent
+        // mapping keys) ends when the next content line at that indent is
+        // NOT a block entry (`- `).  We must emit the sequence's BlockEnd
+        // BEFORE popping the indent_stack so that the nesting order is
+        // correct (sequence closes before its parent mapping).
+        let has_content = self.current_char.is_some()
+            && !matches!(self.current_char, Some('\n' | '\r' | '#'));
+        if has_content {
+            let is_block_entry = self.current_char == Some('-')
+                && self
+                    .peek_char(1)
+                    .map_or(true, |c| c.is_whitespace());
+            while let Some(&seq_indent) = self.compact_sequence_indents.last() {
+                if indent < seq_indent
+                    || (indent == seq_indent && !is_block_entry)
+                {
+                    self.compact_sequence_indents.pop();
+                    self.tokens
+                        .push(Token::simple(TokenType::BlockEnd, line_start_pos));
+                } else {
+                    break;
+                }
+            }
+        }
+
         // Check if we need to emit block end tokens for decreased indentation
         while let Some(&last_indent) = self.indent_stack.last() {
             if indent < last_indent && last_indent > 0 {
                 self.indent_stack.pop();
+                self.indent_is_sequence.pop();
                 self.tokens
                     .push(Token::simple(TokenType::BlockEnd, line_start_pos));
             } else {
@@ -1172,29 +1211,28 @@ impl BasicScanner {
                     if self.current_indent > last_indent {
                         // Deeper indentation - start new nested sequence
                         self.indent_stack.push(self.current_indent);
+                        self.indent_is_sequence.push(true);
                         // Check depth limit
                         self.resource_tracker
                             .check_depth(&self.limits, self.flow_level + self.indent_stack.len())?;
                         self.tokens
                             .push(Token::simple(TokenType::BlockSequenceStart, pos));
+                    } else if self.current_indent == last_indent
+                        && *self.indent_is_sequence.last().unwrap_or(&false)
+                    {
+                        // Same indent and the top of stack is already a sequence
+                        // → continuation of that sequence; no new start needed.
                     } else if self.current_indent >= last_indent {
-                        // Same or root level - check if we need to start a sequence
-                        // We need BlockSequenceStart if we haven't started a sequence yet at this document level
-                        let has_active_sequence = self
-                            .tokens
-                            .iter()
-                            .rev()
-                            .take_while(|t| {
-                                !matches!(
-                                    t.token_type,
-                                    TokenType::StreamStart
-                                        | TokenType::DocumentStart
-                                        | TokenType::DocumentEnd
-                                )
-                            })
-                            .any(|t| matches!(t.token_type, TokenType::BlockSequenceStart));
+                        // Same or root level — compact notation.
+                        // Start a new sequence only if we don't already have one
+                        // tracked at this exact indent.
+                        let has_active_compact = self
+                            .compact_sequence_indents
+                            .last()
+                            .map_or(false, |&si| si == self.current_indent);
 
-                        if !has_active_sequence {
+                        if !has_active_compact {
+                            self.compact_sequence_indents.push(self.current_indent);
                             // Check depth limit
                             self.resource_tracker.check_depth(
                                 &self.limits,
@@ -1218,12 +1256,22 @@ impl BasicScanner {
                         self.inline_sequence_depth += 1;
                         // Also push to indent_stack to track proper nesting
                         self.indent_stack.push(self.position.column);
+                        self.indent_is_sequence.push(true);
                         // Check depth limit
                         self.resource_tracker
                             .check_depth(&self.limits, self.flow_level + self.indent_stack.len())?;
                         self.tokens
                             .push(Token::simple(TokenType::BlockSequenceStart, self.position));
                         // Continue processing - the next iteration will handle the nested dash
+                    } else if self.current_char.is_some()
+                        && !matches!(self.current_char, Some('\n' | '\r'))
+                    {
+                        // Content follows "- " on the same line.
+                        // Update current_indent to the content's column position so that
+                        // any mapping started here will be at a deeper indent level than
+                        // the sequence. This ensures handle_indentation properly closes
+                        // the mapping when the next sibling "- " appears.
+                        self.current_indent = self.position.column - 1;
                     }
                 }
 
@@ -1258,8 +1306,10 @@ impl BasicScanner {
                 }
 
                 // Numbers or plain scalars starting with -
-                _ if ch.is_ascii_digit()
-                    || (ch == '-' && self.peek_char(1).map_or(false, |c| c.is_ascii_digit())) =>
+                // Only scan as number if the entire token is numeric (no trailing letters)
+                _ if (ch.is_ascii_digit()
+                    || (ch == '-' && self.peek_char(1).map_or(false, |c| c.is_ascii_digit())))
+                    && self.is_pure_number() =>
                 {
                     let token = self.scan_number()?;
                     self.tokens.push(token);
@@ -1320,6 +1370,7 @@ impl BasicScanner {
                             if should_start_new_mapping {
                                 // Start mapping before processing the key
                                 self.indent_stack.push(self.current_indent);
+                                self.indent_is_sequence.push(false);
                                 // Check depth limit
                                 self.resource_tracker.check_depth(
                                     &self.limits,
@@ -1356,6 +1407,7 @@ impl BasicScanner {
             // Also pop from indent_stack
             if self.indent_stack.len() > 1 {
                 self.indent_stack.pop();
+                self.indent_is_sequence.pop();
             }
             self.tokens
                 .push(Token::simple(TokenType::BlockEnd, self.position));
@@ -1430,9 +1482,16 @@ impl BasicScanner {
             }
         }
 
+        // Close any remaining compact sequences (before their parent mappings)
+        while self.compact_sequence_indents.pop().is_some() {
+            self.tokens
+                .push(Token::simple(TokenType::BlockEnd, self.position));
+        }
+
         // Close any remaining blocks
         while self.indent_stack.len() > 1 {
             self.indent_stack.pop();
+            self.indent_is_sequence.pop();
             self.tokens
                 .push(Token::simple(TokenType::BlockEnd, self.position));
         }
@@ -1444,6 +1503,44 @@ impl BasicScanner {
     }
 
     /// Peek at a character at the given offset (can be negative)
+    /// Check if the current position starts a pure number (digits/dots/minus only,
+    /// not followed by letters). Values like 500m, 128Mi should be treated as plain scalars.
+    fn is_pure_number(&self) -> bool {
+        let mut offset: isize = 0;
+        let first = self.peek_char(0);
+        // Skip leading minus
+        if first == Some('-') {
+            offset = 1;
+        }
+        // Scan digits and at most one dot
+        let mut has_digit = false;
+        let mut dot_count = 0;
+        loop {
+            match self.peek_char(offset) {
+                Some(c) if c.is_ascii_digit() => {
+                    has_digit = true;
+                    offset += 1;
+                }
+                Some('.') => {
+                    dot_count += 1;
+                    if dot_count > 1 {
+                        // Multiple dots (e.g. 0.5.8) — not a number
+                        return false;
+                    }
+                    offset += 1;
+                }
+                Some(c) if c.is_ascii_alphabetic() || c == '_' => {
+                    // Letters follow the digits — not a pure number (e.g. 500m, 128Mi)
+                    return false;
+                }
+                _ => {
+                    // Whitespace, newline, colon, EOF, etc. — end of token
+                    return has_digit;
+                }
+            }
+        }
+    }
+
     fn peek_char(&self, offset: isize) -> Option<char> {
         if offset >= 0 {
             let target_index = self.current_char_index + offset as usize;
@@ -1910,23 +2007,30 @@ impl BasicScanner {
     /// Check if there's an active mapping at the specified indentation level
     /// This method properly handles BlockEnd tokens by tracking mapping start/end pairs
     fn check_active_mapping_at_level(&self, _target_indent: usize) -> bool {
-        let mut mapping_depth = 0;
-        let _current_mapping_indent: Option<usize> = None;
+        let mut depth = 0;
 
-        // Walk backwards through tokens to find mapping context
+        // Walk backwards through tokens to find the innermost unmatched block start.
+        // Every BlockEnd increments depth; BlockMappingStart and BlockSequenceStart
+        // decrement it (both open blocks that need a matching BlockEnd).
+        // When depth == 0 we have found the block start that is still "open".
         for token in self.tokens.iter().rev() {
             match &token.token_type {
                 TokenType::BlockMappingStart => {
-                    if mapping_depth == 0 {
-                        // This is the most recent unmatched mapping start
-                        // Check if it's at our target indentation level
-                        // We approximate the indentation based on the indent stack when this token was created
-                        return true; // Simplified: assume we found an active mapping
+                    if depth == 0 {
+                        // The innermost open block is a mapping — active at this level.
+                        return true;
                     }
-                    mapping_depth -= 1;
+                    depth -= 1;
+                }
+                TokenType::BlockSequenceStart => {
+                    if depth == 0 {
+                        // The innermost open block is a sequence, not a mapping.
+                        return false;
+                    }
+                    depth -= 1;
                 }
                 TokenType::BlockEnd => {
-                    mapping_depth += 1;
+                    depth += 1;
                 }
                 TokenType::StreamStart | TokenType::DocumentStart | TokenType::DocumentEnd => {
                     // Stop at document boundaries

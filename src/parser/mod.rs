@@ -513,6 +513,19 @@ impl BasicParser {
                         true,
                     ));
                 }
+
+                // Save block context state so we can restore it after the flow collection
+                if matches!(
+                    self.state,
+                    ParserState::BlockMappingValue
+                        | ParserState::BlockMappingKey
+                        | ParserState::BlockSequence
+                        | ParserState::FlowSequence
+                        | ParserState::FlowMapping
+                ) {
+                    self.state_stack.push(self.state);
+                }
+
                 self.events.push(Event::sequence_start(
                     token.start_position,
                     self.pending_anchor.take(),
@@ -531,6 +544,19 @@ impl BasicParser {
                         true,
                     ));
                 }
+
+                // Save block context state so we can restore it after the flow collection
+                if matches!(
+                    self.state,
+                    ParserState::BlockMappingValue
+                        | ParserState::BlockMappingKey
+                        | ParserState::BlockSequence
+                        | ParserState::FlowSequence
+                        | ParserState::FlowMapping
+                ) {
+                    self.state_stack.push(self.state);
+                }
+
                 self.events.push(Event::mapping_start(
                     token.start_position,
                     self.pending_anchor.take(),
@@ -542,7 +568,13 @@ impl BasicParser {
 
             TokenType::FlowSequenceEnd => {
                 self.events.push(Event::sequence_end(token.start_position));
-                self.state = ParserState::DocumentContent;
+
+                // Restore the previous state from the stack if available
+                if let Some(prev_state) = self.state_stack.pop() {
+                    self.state = prev_state;
+                } else {
+                    self.state = ParserState::DocumentContent;
+                }
 
                 // Handle state transitions for mapping key/value processing
                 self.handle_node_completion();
@@ -550,7 +582,13 @@ impl BasicParser {
 
             TokenType::FlowMappingEnd => {
                 self.events.push(Event::mapping_end(token.start_position));
-                self.state = ParserState::DocumentContent;
+
+                // Restore the previous state from the stack if available
+                if let Some(prev_state) = self.state_stack.pop() {
+                    self.state = prev_state;
+                } else {
+                    self.state = ParserState::DocumentContent;
+                }
 
                 // Handle state transitions for mapping key/value processing
                 self.handle_node_completion();

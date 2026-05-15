@@ -109,7 +109,7 @@ pub use schema::{
 };
 pub use value::{CommentedValue, Comments, IndentStyle, Style, Value};
 pub use value_borrowed::BorrowedValue;
-pub use yaml::{LoaderType, Yaml, YamlConfig};
+pub use yaml::{IndentConfig, LoaderType, Yaml, YamlConfig};
 pub use zero_copy_value::OptimizedValue;
 
 // Re-export commonly used types from components

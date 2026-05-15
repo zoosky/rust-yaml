@@ -39,6 +39,8 @@ pub struct YamlConfig {
     pub safe_mode: bool,
     /// Enable strict mode (fail on ambiguous constructs)
     pub strict_mode: bool,
+    /// Whether to emit anchors/aliases for shared values during serialization
+    pub emit_anchors: bool,
 }
 
 /// Type of YAML loader/dumper
@@ -85,6 +87,7 @@ impl Default for YamlConfig {
             limits: Limits::default(),
             safe_mode: false,
             strict_mode: false,
+            emit_anchors: true,
         }
     }
 }
@@ -108,6 +111,7 @@ impl YamlConfig {
             limits: Limits::strict(),
             safe_mode: true,
             strict_mode: true,
+            emit_anchors: true,
         }
     }
 }
@@ -311,6 +315,8 @@ impl Yaml {
     fn emit_yaml_value<W: Write>(&self, value: &Value, writer: W) -> Result<()> {
         // Use the proper emitter implementation
         let mut emitter = BasicEmitter::with_indent(self.config.indent.indent);
+        emitter.set_emit_anchors(self.config.emit_anchors);
+        emitter.set_sequence_indent(self.config.indent.sequence_indent);
         emitter.emit(value, writer)?;
         Ok(())
     }
@@ -329,6 +335,8 @@ impl Yaml {
     fn emit_commented_value<W: Write>(&self, value: &CommentedValue, writer: W) -> Result<()> {
         // Use the proper emitter implementation with comment support
         let mut emitter = BasicEmitter::with_indent(self.config.indent.indent);
+        emitter.set_emit_anchors(self.config.emit_anchors);
+        emitter.set_sequence_indent(self.config.indent.sequence_indent);
         emitter.emit_commented_value_public(value, writer)?;
         Ok(())
     }

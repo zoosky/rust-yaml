@@ -41,6 +41,10 @@ pub struct BasicEmitter {
     indent_style: IndentStyle,
     yaml_version: Option<(u8, u8)>,
     tag_directives: Vec<(String, String)>,
+    /// Whether to automatically detect shared values and emit anchors/aliases
+    emit_anchors: bool,
+    /// Indentation for sequence items (None = same as indent)
+    sequence_indent: Option<usize>,
 }
 
 #[allow(dead_code)]
@@ -55,6 +59,8 @@ impl BasicEmitter {
             indent_style: IndentStyle::default(),
             yaml_version: None,
             tag_directives: Vec::new(),
+            emit_anchors: true,
+            sequence_indent: None,
         }
     }
 
@@ -68,6 +74,8 @@ impl BasicEmitter {
             indent_style: IndentStyle::Spaces(indent),
             yaml_version: None,
             tag_directives: Vec::new(),
+            emit_anchors: true,
+            sequence_indent: None,
         }
     }
 
@@ -85,7 +93,24 @@ impl BasicEmitter {
             indent_style,
             yaml_version: None,
             tag_directives: Vec::new(),
+            emit_anchors: true,
+            sequence_indent: None,
         }
+    }
+
+    /// Enable or disable automatic anchor/alias emission for shared values
+    pub fn set_emit_anchors(&mut self, enabled: bool) {
+        self.emit_anchors = enabled;
+    }
+
+    /// Set the indentation for sequence items (None = same as base indent)
+    pub fn set_sequence_indent(&mut self, indent: Option<usize>) {
+        self.sequence_indent = indent;
+    }
+
+    /// Get the effective sequence indentation
+    fn effective_sequence_indent(&self) -> usize {
+        self.sequence_indent.unwrap_or(self.indent)
     }
 
     /// Set the YAML version directive
@@ -343,44 +368,61 @@ impl BasicEmitter {
         }
 
         // String needs quoting if it could be interpreted as another type
-        if s == "null"
-            || s == "~"
-            || s == "true"
-            || s == "false"
-            || s == "yes"
-            || s == "no"
-            || s == "on"
-            || s == "off"
+        let lower = s.to_ascii_lowercase();
+        if lower == "null"
+            || lower == "~"
+            || lower == "true"
+            || lower == "false"
+            || lower == "yes"
+            || lower == "no"
+            || lower == "on"
+            || lower == "off"
             || s.parse::<i64>().is_ok()
             || s.parse::<f64>().is_ok()
         {
             return true;
         }
 
-        // Check for version-like strings that could be ambiguous
-        // e.g., "2.1.0", "1.2.3", etc. - these contain dots and could be misinterpreted
-        if s.chars().any(|c| c == '.') && s.chars().any(|c| c.is_ascii_digit()) {
-            // If it looks like a version number (contains dots and digits), quote it
-            // to prevent parsing ambiguity
+        // Starts or ends with whitespace
+        if s.starts_with(' ') || s.ends_with(' ') {
             return true;
         }
 
-        // Check for special characters
-        if s.contains('\n')
-            || s.contains('\r')
-            || s.contains('\t')
-            || s.contains('"')
-            || s.contains('\'')
-            || s.contains(':')
-            || s.contains('#')
-            || s.contains('-')
-            || s.contains('[')
-            || s.contains(']')
-            || s.contains('{')
-            || s.contains('}')
-            || s.starts_with(' ')
-            || s.ends_with(' ')
-        {
+        // Contains literal newlines or tabs
+        if s.contains('\n') || s.contains('\r') || s.contains('\t') {
+            return true;
+        }
+
+        // First character is a YAML indicator that would be consumed by the
+        // scanner before reaching plain-scalar scanning.
+        let first = s.as_bytes()[0];
+        if matches!(
+            first,
+            b'[' | b']'
+                | b'{' | b'}'
+                | b'"' | b'\''
+                | b'|' | b'>'
+                | b'!' | b'&'
+                | b'*' | b'?'
+                | b'%' | b','
+                | b'@' | b'`'
+                | b'#'
+        ) {
+            return true;
+        }
+
+        // `- ` or lone `-` at the start would be a block entry indicator
+        if first == b'-' && (s.len() == 1 || s.as_bytes()[1] == b' ') {
+            return true;
+        }
+
+        // `: ` anywhere, or trailing `:`, would be a key-value separator
+        if s.contains(": ") || s.ends_with(':') {
+            return true;
+        }
+
+        // ` #` would start an inline comment
+        if s.contains(" #") {
             return true;
         }
 
@@ -438,8 +480,20 @@ impl BasicEmitter {
             write!(writer, "- ")?;
 
             match item {
-                Value::Sequence(_) | Value::Mapping(_) => {
-                    writeln!(writer)?; // Add newline before nested structure
+                Value::Sequence(seq) if seq.is_empty() => {
+                    write!(writer, "[]")?;
+                }
+                Value::Mapping(map) if map.is_empty() => {
+                    write!(writer, "{{}}")?;
+                }
+                Value::Mapping(map) => {
+                    // Emit mapping inline: first entry on same line as "- "
+                    self.current_indent += self.indent;
+                    self.emit_mapping_inner(map, writer, true)?;
+                    self.current_indent -= self.indent;
+                }
+                Value::Sequence(_) => {
+                    writeln!(writer)?;
                     self.current_indent += self.indent;
                     self.emit_value(item, writer)?;
                     self.current_indent -= self.indent;
@@ -494,16 +548,28 @@ impl BasicEmitter {
                 self.emit_scalar(key, writer)?;
             }
 
-            write!(writer, ": ")?;
-
             match value {
-                Value::Sequence(_) | Value::Mapping(_) => {
-                    writeln!(writer)?; // Add newline before nested structure
+                Value::Sequence(seq) if seq.is_empty() => {
+                    write!(writer, ": []")?;
+                }
+                Value::Mapping(map) if map.is_empty() => {
+                    write!(writer, ": {{}}")?;
+                }
+                Value::Sequence(_) => {
+                    writeln!(writer, ":")?;
+                    let seq_indent = self.effective_sequence_indent();
+                    self.current_indent += seq_indent;
+                    self.emit_value(value, writer)?;
+                    self.current_indent -= seq_indent;
+                }
+                Value::Mapping(_) => {
+                    writeln!(writer, ":")?;
                     self.current_indent += self.indent;
                     self.emit_value(value, writer)?;
                     self.current_indent -= self.indent;
                 }
                 _ => {
+                    write!(writer, ": ")?;
                     self.emit_scalar(value, writer)?;
                 }
             }
@@ -518,6 +584,17 @@ impl BasicEmitter {
         map: &indexmap::IndexMap<Value, Value>,
         writer: &mut W,
     ) -> Result<()> {
+        self.emit_mapping_inner(map, writer, false)
+    }
+
+    /// Emit a mapping, optionally skipping indentation on the first entry
+    /// (used when the first entry follows "- " in a sequence)
+    fn emit_mapping_inner<W: Write>(
+        &mut self,
+        map: &indexmap::IndexMap<Value, Value>,
+        writer: &mut W,
+        skip_first_indent: bool,
+    ) -> Result<()> {
         if map.is_empty() {
             write!(writer, "{{}}")?;
             return Ok(());
@@ -528,9 +605,11 @@ impl BasicEmitter {
             if !first {
                 writeln!(writer)?;
             }
-            first = false;
 
-            self.write_indent(writer)?;
+            if !first || !skip_first_indent {
+                self.write_indent(writer)?;
+            }
+            first = false;
 
             // Handle both simple and complex keys
             let is_complex_key = matches!(key, Value::Sequence(_) | Value::Mapping(_));
@@ -540,11 +619,9 @@ impl BasicEmitter {
                 write!(writer, "? ")?;
                 match key {
                     Value::Mapping(map) => {
-                        // Emit mapping in flow style to avoid ambiguity
                         self.emit_mapping_flow_style(map, writer)?;
                     }
                     Value::Sequence(seq) => {
-                        // Emit sequence in flow style
                         self.emit_sequence_flow_style(seq, writer)?;
                     }
                     _ => {
@@ -558,16 +635,28 @@ impl BasicEmitter {
                 self.emit_scalar(key, writer)?;
             }
 
-            write!(writer, ": ")?;
-
             match value {
-                Value::Sequence(_) | Value::Mapping(_) => {
-                    writeln!(writer)?; // Add newline before nested structure
+                Value::Sequence(seq) if seq.is_empty() => {
+                    write!(writer, ": []")?;
+                }
+                Value::Mapping(map) if map.is_empty() => {
+                    write!(writer, ": {{}}")?;
+                }
+                Value::Sequence(_) => {
+                    writeln!(writer, ":")?;
+                    let seq_indent = self.effective_sequence_indent();
+                    self.current_indent += seq_indent;
+                    self.emit_value(value, writer)?;
+                    self.current_indent -= seq_indent;
+                }
+                Value::Mapping(_) => {
+                    writeln!(writer, ":")?;
                     self.current_indent += self.indent;
                     self.emit_value(value, writer)?;
                     self.current_indent -= self.indent;
                 }
                 _ => {
+                    write!(writer, ": ")?;
                     self.emit_scalar(value, writer)?;
                 }
             }
@@ -771,8 +860,10 @@ impl Emitter for BasicEmitter {
         // Emit directives if any
         self.emit_directives(&mut writer)?;
 
-        // Analyze for shared values first
-        self.analyze_shared_values(value);
+        // Analyze for shared values only if anchors are enabled
+        if self.emit_anchors {
+            self.analyze_shared_values(value);
+        }
 
         // For top-level sequences, add a leading newline for proper formatting
         if matches!(value, Value::Sequence(_)) {
@@ -794,8 +885,10 @@ impl Emitter for BasicEmitter {
         // Emit directives if any
         self.emit_directives(&mut writer)?;
 
-        // Analyze for shared values first
-        self.analyze_shared_values(&value.value);
+        // Analyze for shared values only if anchors are enabled
+        if self.emit_anchors {
+            self.analyze_shared_values(&value.value);
+        }
 
         // Emit the commented value
         self.emit_commented_value(value, &mut writer)?;
@@ -821,8 +914,10 @@ impl Emitter for BasicEmitter {
         // Emit directives if any
         self.emit_directives(&mut writer)?;
 
-        // Analyze for shared values first
-        self.analyze_shared_values(&value.value);
+        // Analyze for shared values only if anchors are enabled
+        if self.emit_anchors {
+            self.analyze_shared_values(&value.value);
+        }
 
         // Emit the commented value with the specified style
         let result = self.emit_commented_value(value, &mut writer);

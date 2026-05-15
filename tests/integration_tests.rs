@@ -369,19 +369,14 @@ mixed_array:
                 panic!("Expected nested sequence");
             }
 
-            // Check nested sequence containing a mapping (this is correct YAML behavior)
-            if let Value::Sequence(ref nested_seq) = seq[5] {
-                assert_eq!(nested_seq.len(), 1);
-                if let Value::Mapping(ref nested_map) = nested_seq[0] {
-                    assert_eq!(
-                        nested_map.get(&Value::String("key".to_string())),
-                        Some(&Value::String("nested_value".to_string()))
-                    );
-                } else {
-                    panic!("Expected mapping inside nested sequence");
-                }
+            // Check mapping as a sequence item (- key: value creates a mapping entry)
+            if let Value::Mapping(ref nested_map) = seq[5] {
+                assert_eq!(
+                    nested_map.get(&Value::String("key".to_string())),
+                    Some(&Value::String("nested_value".to_string()))
+                );
             } else {
-                panic!("Expected nested sequence containing mapping");
+                panic!("Expected mapping as sequence item, got: {:?}", seq[5]);
             }
         } else {
             panic!("Expected sequence");
@@ -389,4 +384,614 @@ mixed_array:
     } else {
         panic!("Expected mapping");
     }
+}
+
+#[test]
+fn test_version_like_strings_not_parsed_as_float() {
+    let yaml = Yaml::new();
+
+    // Version strings like "0.5.8" must be parsed as strings, not floats.
+    // Regression: the scanner treated "0.5.8" as the number 0.5 leaving ".8"
+    // as a stray token, which corrupted the rest of the mapping.
+    let input = r#"
+metadata:
+  app_version: 0.5.8
+  category: core
+  description: A package
+"#;
+
+    let parsed = yaml.load_str(input).expect("Failed to parse YAML");
+
+    if let Value::Mapping(root) = &parsed {
+        let metadata = root
+            .get(&Value::String("metadata".to_string()))
+            .expect("missing 'metadata' key");
+        if let Value::Mapping(meta) = metadata {
+            // app_version must be a string "0.5.8", not a float 0.5
+            let app_version = meta
+                .get(&Value::String("app_version".to_string()))
+                .expect("missing 'app_version' key");
+            assert_eq!(
+                *app_version,
+                Value::String("0.5.8".to_string()),
+                "0.5.8 should be parsed as a string, got {:?}",
+                app_version
+            );
+
+            // category must still be correct (not shifted)
+            let category = meta
+                .get(&Value::String("category".to_string()))
+                .expect("missing 'category' key — mapping was corrupted");
+            assert_eq!(
+                *category,
+                Value::String("core".to_string()),
+            );
+
+            // description must still be correct
+            let description = meta
+                .get(&Value::String("description".to_string()))
+                .expect("missing 'description' key — mapping was corrupted");
+            assert_eq!(
+                *description,
+                Value::String("A package".to_string()),
+            );
+        } else {
+            panic!("Expected metadata to be a mapping");
+        }
+    } else {
+        panic!("Expected root to be a mapping");
+    }
+}
+
+#[test]
+fn test_version_string_round_trip() {
+    let yaml = Yaml::new();
+
+    let input = "version: 0.5.8\n";
+    let parsed = yaml.load_str(input).expect("Failed to parse");
+    let serialized = yaml.dump_str(&parsed).expect("Failed to serialize");
+    let reparsed = yaml.load_str(&serialized).expect("Failed to re-parse");
+    assert_eq!(parsed, reparsed, "Round-trip failed for version string");
+}
+
+/// Compact notation: the `-` of a block sequence sits at the same indent
+/// as the parent mapping keys. Keys that follow the sequence (without `-`)
+/// must be recognised as mapping siblings, NOT extra sequence items.
+#[test]
+fn test_compact_sequence_does_not_swallow_sibling_keys() {
+    let yaml = Yaml::new();
+
+    let input = r#"metadata:
+  features:
+  - upgrade
+  - auto_config
+  name: vynil
+  type: system
+"#;
+
+    let parsed = yaml.load_str(input).expect("Failed to parse YAML");
+
+    if let Value::Mapping(root) = &parsed {
+        let meta = root
+            .get(&Value::String("metadata".to_string()))
+            .expect("missing 'metadata'");
+        if let Value::Mapping(meta) = meta {
+            // features must be a 2-element sequence
+            let features = meta
+                .get(&Value::String("features".to_string()))
+                .expect("missing 'features'");
+            if let Value::Sequence(seq) = features {
+                assert_eq!(seq.len(), 2, "features should have 2 items, got {:?}", seq);
+                assert_eq!(seq[0], Value::String("upgrade".to_string()));
+                assert_eq!(seq[1], Value::String("auto_config".to_string()));
+            } else {
+                panic!("features should be a sequence, got {:?}", features);
+            }
+
+            // name and type must be sibling keys of metadata
+            assert_eq!(
+                meta.get(&Value::String("name".to_string())),
+                Some(&Value::String("vynil".to_string())),
+                "name should be a sibling key of metadata"
+            );
+            assert_eq!(
+                meta.get(&Value::String("type".to_string())),
+                Some(&Value::String("system".to_string())),
+                "type should be a sibling key of metadata"
+            );
+        } else {
+            panic!("metadata should be a mapping");
+        }
+    } else {
+        panic!("root should be a mapping");
+    }
+}
+
+/// Top-level keys after a mapping that contains a compact sequence must
+/// be parsed as top-level, not swallowed into the inner sequence.
+#[test]
+fn test_compact_sequence_does_not_swallow_top_level_keys() {
+    let yaml = Yaml::new();
+
+    let input = r#"metadata:
+  features:
+  - upgrade
+  name: vynil
+images:
+  agent:
+    registry: docker.io
+requirements: []
+"#;
+
+    let parsed = yaml.load_str(input).expect("Failed to parse YAML");
+
+    if let Value::Mapping(root) = &parsed {
+        assert!(
+            root.get(&Value::String("metadata".to_string())).is_some(),
+            "missing top-level 'metadata'"
+        );
+        assert!(
+            root.get(&Value::String("images".to_string())).is_some(),
+            "missing top-level 'images' — it was swallowed into the compact sequence"
+        );
+        assert!(
+            root.get(&Value::String("requirements".to_string())).is_some(),
+            "missing top-level 'requirements'"
+        );
+    } else {
+        panic!("root should be a mapping");
+    }
+}
+
+/// The full package.yaml round-trip: parse → serialize → re-parse must be
+/// structurally identical.
+#[test]
+fn test_package_yaml_round_trip() {
+    let yaml = Yaml::new();
+
+    let input = r#"apiVersion: vinyl.solidite.fr/v1beta1
+kind: Package
+metadata:
+  app_version: 0.5.8
+  category: core
+  description: Vynil controller to manage vynil packages installations
+  features:
+  - upgrade
+  - auto_config
+  name: vynil
+  type: system
+images:
+  agent:
+    registry: docker.io
+    repository: sebt3/vynil-agent
+  controller:
+    registry: docker.io
+    repository: sebt3/vynil-operator
+resources:
+  controller:
+    requests:
+      cpu: 50m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 512Mi
+requirements: []
+"#;
+
+    let parsed = yaml.load_str(input).expect("Failed to parse");
+    let serialized = yaml.dump_str(&parsed).expect("Failed to serialize");
+    let reparsed = yaml.load_str(&serialized).expect("Failed to re-parse");
+    assert_eq!(
+        parsed, reparsed,
+        "Round-trip mismatch.\nSerialized:\n{}",
+        serialized
+    );
+}
+
+/// Strings that happen to contain dots+digits (like domain names) or
+/// hyphens (like docker image names) should not be gratuitously quoted.
+#[test]
+fn test_no_unnecessary_quoting() {
+    let yaml = Yaml::new();
+
+    let input = r#"apiVersion: vinyl.solidite.fr/v1beta1
+repository: sebt3/vynil-agent
+name: my-app
+"#;
+
+    let parsed = yaml.load_str(input).expect("Failed to parse");
+    let serialized = yaml.dump_str(&parsed).expect("Failed to serialize");
+
+    // These strings should NOT be quoted in the output
+    assert!(
+        !serialized.contains("\"vinyl.solidite.fr/v1beta1\""),
+        "Domain-like string should not be quoted. Got:\n{}",
+        serialized
+    );
+    assert!(
+        !serialized.contains("\"sebt3/vynil-agent\""),
+        "Path-like string should not be quoted. Got:\n{}",
+        serialized
+    );
+    assert!(
+        !serialized.contains("\"my-app\""),
+        "Hyphenated string should not be quoted. Got:\n{}",
+        serialized
+    );
+}
+
+/// Nested compact sequences: the Kubernetes CRD pattern has multiple levels
+/// of compact-notation sequences (versions, additionalPrinterColumns,
+/// required, etc.). Each must close correctly when its sibling keys appear.
+#[test]
+fn test_nested_compact_sequences() {
+    let yaml = Yaml::new();
+
+    let input = r#"spec:
+  versions:
+  - additionalPrinterColumns:
+    - description: Update schedule
+      name: schedule
+      type: string
+    - description: Last update
+      name: last_updated
+      type: date
+    name: v1
+    schema:
+      openAPIV3Schema:
+        properties:
+          spec:
+            properties:
+              schedule:
+                type: string
+            required:
+            - schedule
+            type: object
+          status:
+            description: The status object
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+"#;
+
+    let parsed = yaml.load_str(input).expect("Failed to parse");
+
+    // Check top-level structure
+    let root = match &parsed {
+        Value::Mapping(m) => m,
+        _ => panic!("root should be a mapping"),
+    };
+    let spec = match root.get(&Value::String("spec".into())) {
+        Some(Value::Mapping(m)) => m,
+        other => panic!("spec should be a mapping, got {:?}", other),
+    };
+
+    // versions must be a 1-element sequence
+    let versions = match spec.get(&Value::String("versions".into())) {
+        Some(Value::Sequence(s)) => s,
+        other => panic!("versions should be a sequence, got {:?}", other),
+    };
+    assert_eq!(versions.len(), 1, "versions should have 1 item");
+
+    // The single version item must be a mapping with expected keys
+    let v1 = match &versions[0] {
+        Value::Mapping(m) => m,
+        other => panic!("versions[0] should be a mapping, got {:?}", other),
+    };
+
+    // additionalPrinterColumns: 2-element sequence (NOT swallowing name, schema, etc.)
+    let cols = match v1.get(&Value::String("additionalPrinterColumns".into())) {
+        Some(Value::Sequence(s)) => s,
+        other => panic!("additionalPrinterColumns should be a sequence, got {:?}", other),
+    };
+    assert_eq!(
+        cols.len(), 2,
+        "additionalPrinterColumns should have 2 items, got {:?}", cols
+    );
+
+    // name, schema, served, storage must be sibling keys
+    assert_eq!(
+        v1.get(&Value::String("name".into())),
+        Some(&Value::String("v1".into())),
+        "name must be a sibling key"
+    );
+    assert!(
+        v1.get(&Value::String("schema".into())).is_some(),
+        "schema must be a sibling key"
+    );
+    assert_eq!(
+        v1.get(&Value::String("served".into())),
+        Some(&Value::Bool(true)),
+        "served must be a sibling key"
+    );
+    assert_eq!(
+        v1.get(&Value::String("storage".into())),
+        Some(&Value::Bool(true)),
+        "storage must be a sibling key"
+    );
+
+    // Deeper: spec.properties.required must be [schedule], type must be "object"
+    let oas = match v1.get(&Value::String("schema".into())) {
+        Some(Value::Mapping(m)) => match m.get(&Value::String("openAPIV3Schema".into())) {
+            Some(Value::Mapping(m)) => m,
+            _ => panic!("openAPIV3Schema missing"),
+        },
+        _ => panic!("schema missing"),
+    };
+    let props = match oas.get(&Value::String("properties".into())) {
+        Some(Value::Mapping(m)) => m,
+        _ => panic!("properties missing"),
+    };
+    let spec_inner = match props.get(&Value::String("spec".into())) {
+        Some(Value::Mapping(m)) => m,
+        _ => panic!("spec inner missing"),
+    };
+
+    // required must be a compact sequence [schedule]
+    let required = match spec_inner.get(&Value::String("required".into())) {
+        Some(Value::Sequence(s)) => s,
+        other => panic!("required should be a sequence, got {:?}", other),
+    };
+    assert_eq!(required.len(), 1);
+    assert_eq!(required[0], Value::String("schedule".into()));
+
+    // type must be a sibling key "object" (not swallowed by required sequence)
+    assert_eq!(
+        spec_inner.get(&Value::String("type".into())),
+        Some(&Value::String("object".into())),
+        "type must be a sibling of required"
+    );
+
+    // status must be a sibling of spec under properties
+    assert!(
+        props.get(&Value::String("status".into())).is_some(),
+        "status must be a sibling of spec under properties"
+    );
+}
+
+/// Round-trip of nested compact sequences must be structurally stable.
+#[test]
+fn test_nested_compact_sequences_round_trip() {
+    let yaml = Yaml::new();
+
+    let input = r#"spec:
+  versions:
+  - additionalPrinterColumns:
+    - description: Update schedule
+      name: schedule
+    name: v1
+    schema:
+      openAPIV3Schema:
+        properties:
+          spec:
+            required:
+            - schedule
+            type: object
+          status:
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+"#;
+
+    let parsed = yaml.load_str(input).expect("Failed to parse");
+    let serialized = yaml.dump_str(&parsed).expect("Failed to serialize");
+    let reparsed = yaml.load_str(&serialized).expect("Failed to re-parse");
+    assert_eq!(
+        parsed, reparsed,
+        "Nested compact sequence round-trip failed.\nSerialized:\n{}",
+        serialized
+    );
+}
+
+/// Diagnose CRD round-trip bug: nested anyOf/oneOf must not swallow sibling keys.
+#[test]
+fn test_crd_nested_anyof_round_trip() {
+    let yaml = Yaml::new();
+
+    let input = r#"spec:
+  versions:
+  - name: v1
+    schema:
+      openAPIV3Schema:
+        properties:
+          spec:
+            properties:
+              source:
+                anyOf:
+                - oneOf:
+                  - required:
+                    - list
+                  - required:
+                    - harbor
+                - enum:
+                  - null
+                  nullable: true
+                description: Source type
+                type: object
+            required:
+            - schedule
+            type: object
+          status:
+            description: Status
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+"#;
+
+    let parsed = yaml.load_str(input).expect("Failed to parse");
+    let serialized = yaml.dump_str(&parsed).expect("Failed to serialize");
+
+    println!("=== SERIALIZED OUTPUT (Yaml::new) ===");
+    println!("{}", serialized);
+    println!("=== END ===");
+
+    // status: must appear as a mapping key, NOT as a sequence item "- status:"
+    assert!(
+        serialized.contains("status:"),
+        "Serialized output must contain 'status:' as a mapping key"
+    );
+    assert!(
+        !serialized.contains("- status:"),
+        "Serialized output must NOT contain '- status:' (status swallowed into sequence)\nSerialized:\n{}",
+        serialized
+    );
+
+    // Also verify structural stability via re-parse
+    let reparsed = yaml.load_str(&serialized).expect("Failed to re-parse");
+    assert_eq!(
+        parsed, reparsed,
+        "CRD anyOf round-trip failed.\nSerialized:\n{}",
+        serialized
+    );
+}
+
+/// Same CRD test but with round_trip.rs config (sequence_indent: Some(0), indent: 2, emit_anchors: false).
+#[test]
+fn test_crd_nested_anyof_round_trip_with_config() {
+    use rust_yaml::IndentConfig;
+
+    let yaml = Yaml::with_config(YamlConfig {
+        preserve_comments: true,
+        loader_type: LoaderType::RoundTrip,
+        emit_anchors: false,
+        indent: IndentConfig {
+            indent: 2,
+            sequence_indent: Some(0),
+            ..Default::default()
+        },
+        ..Default::default()
+    });
+
+    let input = r#"spec:
+  versions:
+  - name: v1
+    schema:
+      openAPIV3Schema:
+        properties:
+          spec:
+            properties:
+              source:
+                anyOf:
+                - oneOf:
+                  - required:
+                    - list
+                  - required:
+                    - harbor
+                - enum:
+                  - null
+                  nullable: true
+                description: Source type
+                type: object
+            required:
+            - schedule
+            type: object
+          status:
+            description: Status
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+"#;
+
+    let docs = yaml.load_all_str(input).expect("Failed to parse");
+    let serialized = yaml.dump_all_str(&docs).expect("Failed to serialize");
+
+    println!("=== SERIALIZED OUTPUT (with_config, sequence_indent=0) ===");
+    println!("{}", serialized);
+    println!("=== END ===");
+
+    // status: must appear as a mapping key, NOT as a sequence item "- status:"
+    assert!(
+        serialized.contains("status:"),
+        "Serialized output must contain 'status:' as a mapping key"
+    );
+    assert!(
+        !serialized.contains("- status:"),
+        "Serialized output must NOT contain '- status:' (status swallowed into sequence)\nSerialized:\n{}",
+        serialized
+    );
+
+    // Structural stability via re-parse
+    let reparsed = yaml.load_all_str(&serialized).expect("Failed to re-parse");
+    assert_eq!(
+        docs, reparsed,
+        "CRD anyOf round-trip with config failed.\nSerialized:\n{}",
+        serialized
+    );
+}
+
+/// Regression test: mapping keys after deeply-nested compact sequences must stay at the
+/// correct indent level.  The bug was in check_active_mapping_at_level which failed to
+/// count BlockSequenceStart tokens, causing it to walk past the real mapping start and
+/// return false — triggering a spurious BlockMappingStart that split one mapping into two.
+#[test]
+fn test_mapping_keys_after_nested_compact_sequences() {
+    let yaml = Yaml::new();
+
+    let input = r#"spec:
+  versions:
+  - name: v1
+    schema:
+      openAPIV3Schema:
+        properties:
+          spec:
+            properties:
+              source:
+                anyOf:
+                - oneOf:
+                  - required:
+                    - list
+                  - required:
+                    - harbor
+                - enum:
+                  - null
+                  nullable: true
+                description: Source type
+                type: object
+            required:
+            - schedule
+            type: object
+          status:
+            description: Status
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+"#;
+
+    let parsed = yaml.load_str(input).expect("Failed to parse");
+
+    let versions = parsed
+        .as_mapping()
+        .and_then(|m| m.get(&Value::String("spec".into())))
+        .and_then(|s| s.as_mapping())
+        .and_then(|m| m.get(&Value::String("versions".into())))
+        .and_then(|v| v.as_sequence())
+        .expect("spec.versions must be a sequence");
+
+    assert_eq!(versions.len(), 1);
+
+    let item = versions[0].as_mapping().expect("versions[0] must be a mapping");
+    assert!(item.contains_key(&Value::String("served".into())), "served must be inside the sequence item");
+    assert!(item.contains_key(&Value::String("storage".into())), "storage must be inside the sequence item");
+
+    let top = parsed.as_mapping().expect("top level must be a mapping");
+    assert!(!top.contains_key(&Value::String("served".into())), "served must NOT be at top level");
+    assert!(!top.contains_key(&Value::String("storage".into())), "storage must NOT be at top level");
+
+    let serialized = yaml.dump_str(&parsed).expect("Failed to serialize");
+    let reparsed = yaml.load_str(&serialized).expect("Failed to re-parse");
+    assert_eq!(parsed, reparsed, "Round-trip must be stable.\nSerialized:\n{}", serialized);
 }

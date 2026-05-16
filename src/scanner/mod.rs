@@ -1733,10 +1733,19 @@ impl BasicScanner {
                 '|' => {
                     let token = self.scan_literal_block_scalar()?;
                     self.tokens.push(token);
+                    // Block scalar collection rewinds the cursor to the
+                    // start of the next under-indented line. `current_indent`
+                    // is still set to the inline content's column from the
+                    // enclosing `- |` / `key: |` site, so the next iteration
+                    // would mis-dispatch. Break out so the outer loop
+                    // re-enters `process_line` and reruns indent handling
+                    // (yaml-test-suite 4QFQ, M6YH, P2AD).
+                    break;
                 }
                 '>' => {
                     let token = self.scan_folded_block_scalar()?;
                     self.tokens.push(token);
+                    break;
                 }
 
                 // Tags

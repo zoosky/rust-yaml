@@ -358,6 +358,17 @@ prod: *base
         assert_eq!(parse_scalar_value(yaml), "ab cd\n");
     }
 
+    /// Within a literal block scalar, leading whitespace beyond
+    /// `content_indent` is literal content — even on otherwise-blank
+    /// lines. yaml-test-suite case 6FWR.
+    #[test]
+    fn test_literal_blank_line_preserves_extra_indent_as_content() {
+        // content_indent = 1 (first content line " ab" has 1 leading space).
+        // Line 3 "  " has 2 leading spaces; one is indent, one is content.
+        let yaml = "|+\n ab\n\n  \n";
+        assert_eq!(parse_scalar_value(yaml), "ab\n\n \n");
+    }
+
     #[test]
     fn test_folded_strip_removes_trailing_newlines() {
         let yaml = ">-\n  ab\n";

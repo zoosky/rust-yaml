@@ -2327,6 +2327,11 @@ impl BasicScanner {
                 // to consume. EOF after the previous line's `\n` is not a
                 // phantom trailing blank.
                 if matches!(self.current_char, Some('\n') | Some('\r')) {
+                    // Whitespace beyond content_indent is literal content
+                    // even on blank lines (yaml-test-suite 6FWR).
+                    for _ in content_indent..line_indent {
+                        content.push(' ');
+                    }
                     content.push('\n');
                     self.advance();
                     continue;

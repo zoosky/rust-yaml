@@ -48,33 +48,49 @@ fn has_open_document(events: &[Event]) -> bool {
 /// collection starts in `events`. Called before emitting a `DocumentEnd`
 /// when an outer construct (e.g. a new `---` marker) forces the previous
 /// document closed without going through the usual indent-driven
-/// `BlockEnd` token path. Tracks balance via a counter and emits the
-/// needed end events in inside-out order.
+/// `BlockEnd` token path. Also synthesises implicit empty scalars for
+/// mappings that have an odd child-event count (i.e. a key without a
+/// value before the close).
 fn close_open_collections(events: &mut Vec<Event>, pos: Position) {
-    // Count net unclosed starts since the last DocumentStart, in order.
-    let mut stack: Vec<&'static str> = Vec::new();
-    let mut depth_doc = 0;
+    // Each entry: (kind, children_at_this_depth) where `kind` is "map"
+    // or "seq". `children` counts top-level node events emitted inside
+    // this collection (Scalar, Alias, or a closed nested collection).
+    let mut stack: Vec<(&'static str, usize)> = Vec::new();
     for ev in events.iter() {
         match &ev.event_type {
-            EventType::DocumentStart { .. } => {
-                depth_doc += 1;
+            EventType::DocumentStart { .. } | EventType::DocumentEnd { .. } => {
                 stack.clear();
             }
-            EventType::DocumentEnd { .. } => {
-                if depth_doc > 0 {
-                    depth_doc -= 1;
-                }
-                stack.clear();
-            }
-            EventType::MappingStart { .. } => stack.push("map"),
-            EventType::SequenceStart { .. } => stack.push("seq"),
+            EventType::MappingStart { .. } => stack.push(("map", 0)),
+            EventType::SequenceStart { .. } => stack.push(("seq", 0)),
             EventType::MappingEnd | EventType::SequenceEnd => {
                 stack.pop();
+                if let Some(parent) = stack.last_mut() {
+                    parent.1 += 1;
+                }
+            }
+            EventType::Scalar { .. } | EventType::Alias { .. } => {
+                if let Some(parent) = stack.last_mut() {
+                    parent.1 += 1;
+                }
             }
             _ => {}
         }
     }
-    while let Some(kind) = stack.pop() {
+    while let Some((kind, children)) = stack.pop() {
+        if kind == "map" && children % 2 == 1 {
+            // Odd child count → last key has no value yet. Spec says
+            // emit implicit empty scalar (YAML 1.2 §6.9.1).
+            events.push(Event::scalar(
+                pos,
+                None,
+                None,
+                String::new(),
+                true,
+                false,
+                ScalarStyle::Plain,
+            ));
+        }
         match kind {
             "map" => events.push(Event::mapping_end(pos)),
             "seq" => events.push(Event::sequence_end(pos)),

@@ -51,6 +51,26 @@ fn has_open_document(events: &[Event]) -> bool {
 /// `BlockEnd` token path. Also synthesises implicit empty scalars for
 /// mappings that have an odd child-event count (i.e. a key without a
 /// value before the close).
+/// Return true when there is at least one *flow* collection still open
+/// (a `SequenceStart` / `MappingStart` with `flow_style=true` without a
+/// matching `…End` afterwards). Used at end-of-stream to enforce §7.4.
+fn has_unclosed_flow_collection(events: &[Event]) -> bool {
+    let mut depth: i32 = 0;
+    for ev in events.iter() {
+        match &ev.event_type {
+            EventType::SequenceStart { flow_style: true, .. }
+            | EventType::MappingStart { flow_style: true, .. } => depth += 1,
+            EventType::SequenceEnd | EventType::MappingEnd => {
+                if depth > 0 {
+                    depth -= 1;
+                }
+            }
+            _ => {}
+        }
+    }
+    depth > 0
+}
+
 /// Return true when the innermost still-open mapping has an odd number
 /// of children — i.e. a key has been emitted but its value has not.
 /// Used to decide when to synthesise an implicit empty scalar.
@@ -448,6 +468,16 @@ impl BasicParser {
                     return Err(Error::parse(
                         token.start_position,
                         "Directive without a document body",
+                    ));
+                }
+                // YAML 1.2 §7.4: every `[` / `{` must be closed before
+                // end-of-stream. Walk the events; an unmatched
+                // FlowSequenceStart / FlowMappingStart is invalid
+                // (yaml-test-suite 6JTT, 9HCY, 9MQT/01).
+                if has_unclosed_flow_collection(&self.events) {
+                    return Err(Error::parse(
+                        token.start_position,
+                        "Unclosed flow collection at end of stream",
                     ));
                 }
                 // YAML 1.2: an explicit `---` with NO body needs an

@@ -817,6 +817,39 @@ impl BasicScanner {
                 // a literal character. (Single-quote escape is `''`.)
                 value.push(ch);
                 self.advance();
+            } else if ch == '\n' || ch == '\r' {
+                // YAML 1.2 §7.3.2 (double-quoted) / §7.3.3 (single-quoted)
+                // line folding: a single newline within a quoted scalar
+                // folds to a space; N>1 consecutive newlines retain N-1;
+                // leading whitespace on the continuation line is excluded.
+                let mut newlines = 0usize;
+                while let Some(c) = self.current_char {
+                    match c {
+                        '\n' => {
+                            newlines += 1;
+                            self.advance();
+                        }
+                        '\r' => {
+                            self.advance();
+                        }
+                        ' ' | '\t' => {
+                            self.advance();
+                        }
+                        _ => break,
+                    }
+                }
+                // Drop trailing whitespace on the prior line (the bytes
+                // we already pushed) before applying the fold.
+                while matches!(value.chars().last(), Some(' ' | '\t')) {
+                    value.pop();
+                }
+                if newlines <= 1 {
+                    value.push(' ');
+                } else {
+                    for _ in 0..(newlines - 1) {
+                        value.push('\n');
+                    }
+                }
             } else {
                 value.push(ch);
                 self.advance();

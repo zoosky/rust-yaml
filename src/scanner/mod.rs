@@ -740,6 +740,7 @@ impl BasicScanner {
         };
 
         self.advance(); // Skip opening quote
+        let mut closed = false;
 
         while let Some(ch) = self.current_char {
             if ch == quote_char {
@@ -753,6 +754,7 @@ impl BasicScanner {
                     continue;
                 }
                 self.advance(); // Skip closing quote
+                closed = true;
                 break;
             } else if ch == '\\' && quote_char == '"' {
                 self.advance();
@@ -888,6 +890,13 @@ impl BasicScanner {
         }
 
         // Check string length limit
+        if !closed {
+            return Err(Error::scan(
+                self.position,
+                format!("Unclosed {} quoted string", if quote_char == '"' { "double" } else { "single" }),
+            ));
+        }
+
         self.resource_tracker
             .check_string_length(&self.limits, value.len())?;
 
@@ -2833,7 +2842,7 @@ normal: value # This is a comment
             (r#""\v""#, "\x0B"), // vertical tab
             (r#""\e""#, "\x1B"), // escape
             (r#""\ ""#, " "),    // literal space
-            (r#""\/"#, "/"),     // literal forward slash
+            (r#""\/""#, "/"),    // literal forward slash
         ];
 
         for (input, expected) in test_cases {

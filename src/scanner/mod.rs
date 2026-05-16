@@ -1355,12 +1355,22 @@ impl BasicScanner {
                     self.skip_whitespace();
                 }
                 '#' => {
+                    // YAML 1.2 §6.6: a comment must be preceded by whitespace
+                    // OR be at the start of a line. Inputs like `,#invalid`
+                    // (yaml-test-suite CVW2) are not valid comments.
+                    let prev = self.peek_char(-1);
+                    let at_line_start = self.position.column == 1;
+                    let preceded_by_space = prev.map_or(true, |c| c.is_whitespace());
+                    if !at_line_start && !preceded_by_space {
+                        return Err(Error::scan(
+                            self.position,
+                            "Comment `#` must be preceded by whitespace".to_string(),
+                        ));
+                    }
                     if self.preserve_comments {
-                        // Create a comment token
                         let comment_token = self.scan_comment()?;
                         self.tokens.push(comment_token);
                     } else {
-                        // Skip rest of line (comment)
                         while let Some(ch) = self.current_char {
                             if ch == '\n' || ch == '\r' {
                                 break;

@@ -7,12 +7,12 @@ Live tracker for closing the gap between rust-yaml and the yaml/yaml-test-suite
 
 | Metric          | Value          |
 | --------------- | -------------- |
-| Tests passing   | **424 / 735** (57.7 %) |
+| Tests passing   | **441 / 735** (60.0 %) |
 | Parser hangs    | 0 ✅           |
 | Wrong-reject    | 42             |
 | Wrong-accept    | 102            |
-| Wrong-events    | 167            |
-| Lib unit tests  | 169 passing    |
+| Wrong-events    | 150            |
+| Lib unit tests  | 174 passing    |
 
 Live results are written to `target/yaml-test-suite-failures.txt` after every
 `make test-yaml-suite` run. Categories: `Timeouts`, `Wrong reject`,
@@ -72,11 +72,23 @@ Session 4 commits (341 → 373 = +32):
 * `66597f2` Close open collections before final DocumentEnd at EOS (+6).
 * `2f3830f` Close open collections before explicit `...` DocumentEnd (+2).
 
-Session 5 commits (377 → 424 = +47):
+Session 5 commits (377 → 441 = +64):
 
 * `265ea5a` Implement §8.1.1.2 block-scalar chomping (clip/strip/keep)
   and fix `find_block_scalar_indent` single-line bug (+47, biggest
   single-commit win since session 2).
+* `74decb8` Preserve folded line breaks adjacent to more-indented
+  content per §8.1.3.2 (+4).
+* `71451c9` `check_for_mapping_ahead` scans past inner `:` so plain
+  scalars containing colons are still recognised as mapping keys (+4).
+* `c3d29e9` Synthesise implicit empty value when a key is followed by
+  another key with no intervening `:` (yaml-test-suite 7W2P), via the
+  new `innermost_mapping_has_odd_children` helper (+4).
+* `b338eaa` Synthesise implicit empty key when a line starts with `:`
+  (2JQS) — handle ImplicitDocumentStart / DocumentContent /
+  BlockMappingKey-even states; skip the "this scalar is a new key"
+  heuristic immediately after a just-synthesised empty key (+5).
+  60.0% milestone reached.
 
 ## Blocked clusters (need deeper refactors)
 

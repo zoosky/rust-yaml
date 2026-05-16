@@ -673,6 +673,13 @@ impl BasicScanner {
                 break;
             }
 
+            // Per §6.5 line folding, trailing whitespace on the line is
+            // dropped (it gets replaced by the fold separator that the
+            // next continuation block emits).
+            while matches!(value.chars().last(), Some(' ' | '\t')) {
+                value.pop();
+            }
+
             // YAML 1.2 §6.5 / §7.3.3: try to fold continuation lines into
             // the same plain scalar. A continuation line must be:
             //   * indented strictly more than the scalar's start column,

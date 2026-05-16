@@ -302,10 +302,16 @@ impl BasicParser {
             }
 
             TokenType::StreamEnd => {
-                // Close any open document
-                if matches!(
+                // Close any open document. A document is "open" in every
+                // state except: not-yet-started (StreamStart /
+                // ImplicitDocumentStart), or already closed (DocumentEnd /
+                // StreamEnd).
+                if !matches!(
                     self.state,
-                    ParserState::DocumentContent | ParserState::BlockNode
+                    ParserState::StreamStart
+                        | ParserState::ImplicitDocumentStart
+                        | ParserState::DocumentEnd
+                        | ParserState::StreamEnd
                 ) {
                     self.events
                         .push(Event::document_end(token.start_position, true));

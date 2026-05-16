@@ -2224,6 +2224,35 @@ mod tests {
         assert_eq!(keys, vec![":foo", "bar"]);
     }
 
+    /// YAML 1.2: every started document must be closed with a DocumentEnd
+    /// event before StreamEnd. The previous `TokenType::StreamEnd` handler
+    /// only emitted `-DOC` for `DocumentContent` / `BlockNode` states —
+    /// the `DocumentStart` state (entered after `---` and a single scalar
+    /// like `"foo"`) was skipped, dropping the `-DOC` event. Affected by
+    /// yaml-test-suite 27NA, 2G84/*, 2LFX and several others.
+    #[test]
+    fn explicit_doc_with_only_a_scalar_emits_doc_end_before_stream_end() {
+        use crate::parser::{BasicParser, EventType, Parser as ParserTrait};
+        let mut p = BasicParser::new_eager("---\n\"foo\"\n".to_string());
+        assert!(p.take_scanning_error().is_none());
+        let mut kinds = Vec::new();
+        while let Ok(Some(ev)) = p.get_event() {
+            kinds.push(match ev.event_type {
+                EventType::StreamStart => "+STR",
+                EventType::StreamEnd => "-STR",
+                EventType::DocumentStart { .. } => "+DOC",
+                EventType::DocumentEnd { .. } => "-DOC",
+                EventType::Scalar { .. } => "=VAL",
+                _ => "?",
+            });
+        }
+        // Critical: -DOC must come before -STR.
+        let doc_end_idx = kinds.iter().position(|s| *s == "-DOC");
+        let str_end_idx = kinds.iter().position(|s| *s == "-STR");
+        assert!(doc_end_idx.is_some(), "missing -DOC in event stream: {kinds:?}");
+        assert!(doc_end_idx < str_end_idx, "expected -DOC before -STR, got {kinds:?}");
+    }
+
     /// YAML 1.2: a complex-key marker (`?`) is the first content after an
     /// explicit document start (`---`) — it should open an implicit block
     /// mapping. The previous parser handled `?` only in

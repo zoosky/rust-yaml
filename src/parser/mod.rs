@@ -974,6 +974,23 @@ impl BasicParser {
             }
 
             TokenType::FlowMappingEnd => {
+                // §7.5: explicit `?` with no key (yaml-test-suite
+                // DFF7 \`{... ?\n}\`) — synth empty key AND empty
+                // value before closing.
+                if matches!(self.state, ParserState::FlowMappingKey)
+                    && self.explicit_key_pending
+                    && !innermost_mapping_has_odd_children(&self.events)
+                {
+                    self.events.push(Event::scalar(
+                        token.start_position,
+                        None,
+                        None,
+                        String::new(),
+                        true,
+                        false,
+                        ScalarStyle::Plain,
+                    ));
+                }
                 // Spec §7.5: implicit empty value for a flow-mapping
                 // entry that has only a key, e.g. `{ key }` or
                 // `{ key, a: b }` (yaml-test-suite 8KB6).

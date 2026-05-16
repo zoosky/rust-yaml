@@ -398,7 +398,14 @@ impl BasicParser {
             TokenType::DocumentEnd => {
                 self.events
                     .push(Event::document_end(token.start_position, false));
-                self.state = ParserState::DocumentEnd;
+                // YAML 1.2: after `...`, the stream may continue with
+                // either another `---`, more directives, or implicit
+                // document content. Transition into the
+                // ImplicitDocumentStart state so subsequent content
+                // tokens correctly open the next document (yaml-test-
+                // suite 7Z25). Directive handlers also accept
+                // `ImplicitDocumentStart`, so that path stays open.
+                self.state = ParserState::ImplicitDocumentStart;
             }
 
             TokenType::BlockSequenceStart => {

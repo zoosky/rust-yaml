@@ -1059,6 +1059,20 @@ impl BasicParser {
                                 ScalarStyle::Plain,
                             ));
                         }
+                        // Flush leftover anchor/tag as a final tagged
+                        // empty scalar (mirror of the BlockSequence
+                        // arm).
+                        if self.pending_anchor.is_some() || self.pending_tag.is_some() {
+                            self.events.push(Event::scalar(
+                                token.start_position,
+                                self.pending_anchor.take(),
+                                self.pending_tag.take(),
+                                String::new(),
+                                true,
+                                false,
+                                ScalarStyle::Plain,
+                            ));
+                        }
                         self.events.push(Event::mapping_end(token.start_position));
                         // Pop previous state from stack if available
                         if let Some(prev_state) = self.state_stack.pop() {

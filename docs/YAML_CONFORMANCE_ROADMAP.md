@@ -7,11 +7,11 @@ Live tracker for closing the gap between rust-yaml and the yaml/yaml-test-suite
 
 | Metric          | Value          |
 | --------------- | -------------- |
-| Tests passing   | **341 / 735** (46.4 %) |
+| Tests passing   | **373 / 735** (50.7 %) |
 | Parser hangs    | 0 ✅           |
-| Wrong-reject    | 42             |
-| Wrong-accept    | 114            |
-| Wrong-events    | 238            |
+| Wrong-reject    | 38             |
+| Wrong-accept    | 102            |
+| Wrong-events    | 222            |
 | Lib unit tests  | 163 passing    |
 
 Live results are written to `target/yaml-test-suite-failures.txt` after every
@@ -63,6 +63,14 @@ Session 3 commits (314 → 341 = +27):
 * `5f0096d` Implicit empty scalar between back-to-back `---` (+2).
 * `59fa0b0` Implicit empty scalar for `---\n...` empty document (+2).
 * `0dbee5e` Relax over-strict double-tag check (net 0; wrong-reject -4).
+
+Session 4 commits (341 → 373 = +32):
+
+* `0bff770` Reject multi-line quoted scalars used as implicit keys (+6).
+* `382a9a3` Reject multi-line plain scalars used as implicit keys (+6).
+* `3df22e4` Close open collections before `---` starts new document (+12).
+* `66597f2` Close open collections before final DocumentEnd at EOS (+6).
+* `2f3830f` Close open collections before explicit `...` DocumentEnd (+2).
 
 ## Blocked clusters (need deeper refactors)
 

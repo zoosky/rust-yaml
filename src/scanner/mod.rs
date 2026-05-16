@@ -1034,9 +1034,17 @@ impl BasicScanner {
                 return Ok(());
             }
 
-            // If not a recognized directive, treat as error
+            // YAML 1.2 §6.8.4: a YAML processor MUST ignore directives it
+            // does not recognize. Skip the line silently — parsing continues
+            // with whatever follows on the next line.
             if self.current_char == Some('%') {
-                return Err(Error::scan(self.position, "Unknown directive".to_string()));
+                while let Some(ch) = self.current_char {
+                    if ch == '\n' || ch == '\r' {
+                        break;
+                    }
+                    self.advance();
+                }
+                return Ok(());
             }
         }
 
@@ -2153,6 +2161,30 @@ mod tests {
             starts_with_dashes,
             "expected a plain scalar starting with `---`, got events: {events:?}"
         );
+    }
+
+    /// YAML 1.2 §6.8.4: "A YAML processor should ignore any directive it
+    /// does not recognize." A `%FOO` reserved directive must NOT be treated
+    /// as a scan error — the directive line is silently skipped and parsing
+    /// continues. Tracked by yaml-test-suite test 2LFX.
+    #[test]
+    fn reserved_directive_is_ignored_not_an_error() {
+        use crate::parser::{BasicParser, EventType, Parser as ParserTrait};
+        let mut p = BasicParser::new_eager(
+            "%FOO  bar baz # Should be ignored\n              # with a warning.\n---\n\"foo\"\n"
+                .to_string(),
+        );
+        assert!(
+            p.take_scanning_error().is_none(),
+            "unknown directives must NOT produce a scan error"
+        );
+        let mut scalars = Vec::new();
+        while let Ok(Some(ev)) = p.get_event() {
+            if let EventType::Scalar { value, .. } = ev.event_type {
+                scalars.push(value);
+            }
+        }
+        assert_eq!(scalars, vec!["foo"]);
     }
 
     /// Spec requires the two physical lines of `---word1\nword2` to fold into

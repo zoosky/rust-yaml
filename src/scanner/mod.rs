@@ -739,6 +739,15 @@ impl BasicScanner {
 
         while let Some(ch) = self.current_char {
             if ch == quote_char {
+                // YAML 1.2 §7.3.2 (Single-Quoted): `''` is the only escape,
+                // collapsing to a single `'`. Detect that here BEFORE
+                // treating the quote as the closing delimiter.
+                if quote_char == '\'' && self.peek_char(1) == Some('\'') {
+                    value.push('\'');
+                    self.advance();
+                    self.advance();
+                    continue;
+                }
                 self.advance(); // Skip closing quote
                 break;
             } else if ch == '\\' && quote_char == '"' {
@@ -763,7 +772,16 @@ impl BasicScanner {
                         '_' => value.push('\u{00A0}'),
                         'L' => value.push('\u{2028}'),
                         'P' => value.push('\u{2029}'),
-                        '\n' => {} // escaped line continuation — drop the newline
+                        '\n' => {
+                            // Escaped line break (§7.3.2): the newline is
+                            // dropped AND leading whitespace on the next
+                            // line is excluded from the content.
+                            self.advance();
+                            while matches!(self.current_char, Some(' ' | '\t')) {
+                                self.advance();
+                            }
+                            continue;
+                        }
                         '\t' => value.push('\t'), // literal tab after `\` → tab (yaml-test-suite 3RLN/DE56)
                         // Hex / Unicode escapes per YAML 1.2 §5.7:
                         //   \xNN     — 2 hex digits, codepoint  ≤ 0xFF

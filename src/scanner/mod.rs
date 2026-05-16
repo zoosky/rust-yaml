@@ -723,14 +723,21 @@ impl BasicScanner {
                 && self.peek_char(2) == next_ch
                 && self.peek_char(3).map_or(true, |c| c.is_whitespace());
 
-            // Continuation column must be >= the scalar's start column
-            // in BLOCK context (`>=` for `---word1\nword2`, mapping values
-            // with `k: v1\n  v2`, etc.). In FLOW context the column rule
-            // doesn't apply: continuation just needs to land on a
-            // non-flow-indicator character (yaml-test-suite 8KB6,
-            // multi-line flow keys).
-            let column_ok =
-                self.flow_level > 0 || next_col >= start_col;
+            // Continuation column rule:
+            //   * Flow context: no column rule, only flow indicators
+            //     terminate (8KB6, 8UDB, 9BXH).
+            //   * Block context: must be strictly deeper than the parent
+            //     block's key column. For a mapping at indent N, keys
+            //     sit at column N+1; continuation must be at column
+            //     >= N+2 (yaml-test-suite 36F6: `plain: a\n b\n\n c`).
+            //     Fall back to `next_col >= start_col` for top-level
+            //     scalars where there's no enclosing block.
+            let column_ok = if self.flow_level > 0 {
+                true
+            } else {
+                let parent_indent = self.indent_stack.last().copied().unwrap_or(0);
+                next_col >= parent_indent + 2 || next_col >= start_col
+            };
             let can_continue = next_ch.is_some()
                 && !matches!(next_ch, Some('\n' | '\r' | '#'))
                 && column_ok

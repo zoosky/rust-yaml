@@ -2245,22 +2245,22 @@ impl BasicScanner {
 
     /// Find the content indentation for a block scalar.
     ///
-    /// The cursor is positioned at the start of the first content line
-    /// (caller has already consumed the header's terminating newline via
-    /// `skip_to_next_line`). Per spec §8.1.1.1: indent = leading spaces on
-    /// the first non-empty line; if none, the longest leading-space count.
-    fn find_block_scalar_indent(&mut self, base_indent: usize) -> Result<usize> {
+    /// Per spec §8.1.1.1, indent is the leading-space count of the first
+    /// non-empty content line (or the longest blank-line indent if no
+    /// non-empty line exists). Auto-detected content can legitimately
+    /// sit at any positive column, including below the column of the
+    /// indicator itself when the indicator is inline with a sequence
+    /// dash (yaml-test-suite 4QFQ, M6YH, P2AD).
+    fn find_block_scalar_indent(&mut self, _base_indent: usize) -> Result<usize> {
         let saved_position = self.position;
         let saved_char = self.current_char;
         let saved_char_index = self.current_char_index;
 
-        let mut max_blank_indent = base_indent;
+        let mut max_blank_indent: usize = 0;
         let mut found = false;
-        let mut content_indent = base_indent + 1;
+        let mut content_indent: usize = 1;
 
-        // Walk lines without mutating long-term state. We restore at the end.
         loop {
-            // Count leading spaces on the current line.
             let mut line_indent = 0;
             while let Some(' ') = self.current_char {
                 line_indent += 1;
@@ -2277,22 +2277,17 @@ impl BasicScanner {
                     continue;
                 }
                 Some(_) => {
-                    if line_indent > base_indent {
-                        content_indent = line_indent;
-                    } else {
-                        content_indent = base_indent + 1;
-                    }
+                    content_indent = line_indent.max(1);
                     found = true;
                     break;
                 }
             }
         }
 
-        if !found && max_blank_indent > base_indent {
+        if !found && max_blank_indent > 0 {
             content_indent = max_blank_indent;
         }
 
-        // Restore position
         self.position = saved_position;
         self.current_char = saved_char;
         self.current_char_index = saved_char_index;

@@ -741,36 +741,51 @@ impl BasicScanner {
             if ch == quote_char {
                 self.advance(); // Skip closing quote
                 break;
-            } else if ch == '\\' {
+            } else if ch == '\\' && quote_char == '"' {
                 self.advance();
                 if let Some(escaped) = self.current_char {
                     match escaped {
-                        // Standard C-style escapes
-                        'n' => value.push('\n'),  // newline
-                        't' => value.push('\t'),  // tab
-                        'r' => value.push('\r'),  // carriage return
-                        '\\' => value.push('\\'), // literal backslash
-                        '\'' => value.push('\''), // single quote
-                        '"' => value.push('"'),   // double quote
-
-                        // Additional YAML escapes
-                        '0' => value.push('\0'),   // null character
-                        'a' => value.push('\x07'), // bell character
-                        'b' => value.push('\x08'), // backspace
-                        'f' => value.push('\x0C'), // form feed
-                        'v' => value.push('\x0B'), // vertical tab
-                        'e' => value.push('\x1B'), // escape character
-                        ' ' => value.push(' '),    // literal space
-                        '/' => value.push('/'),    // literal forward slash
-
-                        // For unknown escapes, preserve them literally (YAML spec behavior)
-                        _ => {
+                        // YAML 1.2 §5.7 double-quoted escape allowlist.
+                        'n' => value.push('\n'),
+                        't' => value.push('\t'),
+                        'r' => value.push('\r'),
+                        '\\' => value.push('\\'),
+                        '"' => value.push('"'),
+                        '0' => value.push('\0'),
+                        'a' => value.push('\x07'),
+                        'b' => value.push('\x08'),
+                        'f' => value.push('\x0C'),
+                        'v' => value.push('\x0B'),
+                        'e' => value.push('\x1B'),
+                        ' ' => value.push(' '),
+                        '/' => value.push('/'),
+                        'N' => value.push('\u{0085}'),
+                        '_' => value.push('\u{00A0}'),
+                        'L' => value.push('\u{2028}'),
+                        'P' => value.push('\u{2029}'),
+                        '\n' => {} // escaped line continuation — drop the newline
+                        // Hex/unicode escapes \x## \u#### \U######## are not
+                        // yet implemented; treat them as currently accepted
+                        // pending a dedicated fix.
+                        'x' | 'u' | 'U' => {
                             value.push('\\');
                             value.push(escaped);
+                        }
+                        // Everything else is invalid per spec.
+                        _ => {
+                            return Err(Error::scan(
+                                self.position,
+                                format!("Invalid escape sequence: \\{escaped}"),
+                            ));
                         }
                     }
                     self.advance();
                 }
+            } else if ch == '\\' {
+                // Single-quoted strings have no backslash escapes — `\` is
+                // a literal character. (Single-quote escape is `''`.)
+                value.push(ch);
+                self.advance();
             } else {
                 value.push(ch);
                 self.advance();
@@ -2322,6 +2337,33 @@ mod tests {
         assert!(doc_end_idx < str_end_idx, "expected -DOC before -STR, got {kinds:?}");
     }
 
+    /// YAML 1.2 §5.7: double-quoted strings have a strict allowlist of escape
+    /// sequences. `\.` (and any other unknown escape) must be reported as a
+    /// scan error. Tracked by yaml-test-suite 55WF.
+    #[test]
+    fn invalid_double_quoted_escape_is_a_scan_error() {
+        use crate::parser::{BasicParser, Parser as ParserTrait};
+        let mut p = BasicParser::new_eager("---\n\"\\.\"\n".to_string());
+        let scan_err = p.take_scanning_error();
+        let mut parse_err = false;
+        if scan_err.is_none() {
+            loop {
+                match p.get_event() {
+                    Ok(Some(_)) => continue,
+                    Ok(None) => break,
+                    Err(_) => {
+                        parse_err = true;
+                        break;
+                    }
+                }
+            }
+        }
+        assert!(
+            scan_err.is_some() || parse_err,
+            "`\\.` is not a valid double-quoted escape and must error"
+        );
+    }
+
     /// YAML 1.2: a complex-key marker (`?`) is the first content after an
     /// explicit document start (`---`) — it should open an implicit block
     /// mapping. The previous parser handled `?` only in
@@ -2563,14 +2605,15 @@ normal: value # This is a comment
 
     #[test]
     fn test_escape_sequences() {
-        // Test standard C-style escapes
+        // YAML 1.2 §5.7 double-quoted escape sequences. Single-quoted strings
+        // have NO backslash escapes — `''` is the only escape — so this set
+        // is restricted to the double-quoted cases.
         let test_cases = vec![
             (r#""Line 1\nLine 2""#, "Line 1\nLine 2"),
             (r#""Col1\tCol2""#, "Col1\tCol2"),
             (r#""First\rSecond""#, "First\rSecond"),
             (r#""Path\\to\\file""#, "Path\\to\\file"),
             (r#""He said \"Hello\"""#, "He said \"Hello\""),
-            (r"'Don\'t do that'", "Don't do that"),
         ];
 
         for (input, expected) in test_cases {
@@ -2621,21 +2664,16 @@ normal: value # This is a comment
 
     #[test]
     fn test_unknown_escape_sequences() {
-        // Test that unknown escape sequences are preserved literally
-        let input = r#""\z\q\8""#;
-        let expected = "\\z\\q\\8"; // Should preserve backslashes for unknown escapes
-
-        let mut scanner = BasicScanner::new(input.to_string());
-        scanner.get_token().unwrap(); // Skip StreamStart
-
-        if let Ok(Some(token)) = scanner.get_token() {
-            if let TokenType::Scalar(value, _) = token.token_type {
-                assert_eq!(value, expected);
-            } else {
-                panic!("Expected scalar token");
-            }
-        } else {
-            panic!("Failed to get token");
+        // YAML 1.2 §5.7: unknown double-quoted escapes are scan errors, not
+        // preserved literals. (Earlier versions of this scanner kept the
+        // backslash + char verbatim — see commit history.)
+        for input in [r#""\z""#, r#""\q""#, r#""\8""#] {
+            let mut scanner = BasicScanner::new(input.to_string());
+            scanner.get_token().unwrap(); // StreamStart
+            assert!(
+                scanner.get_token().is_err(),
+                "expected scan error for invalid escape in {input}"
+            );
         }
     }
 }

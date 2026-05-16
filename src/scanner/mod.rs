@@ -2074,8 +2074,14 @@ impl BasicScanner {
         // Skip to next line
         self.skip_to_next_line()?;
 
-        // Determine indentation
-        let base_indent = self.current_indent;
+        // Determine indentation. `base_indent` is the surrounding
+        // block's indent — i.e. the indent of the sequence or
+        // mapping that contains this scalar. `self.current_indent`
+        // is sometimes set to the inline indicator column (e.g. 2
+        // for `- |`), which would make `base_indent + explicit`
+        // wrong; use the top of `indent_stack` instead
+        // (yaml-test-suite 4QFQ `|1`).
+        let base_indent = self.indent_stack.last().copied().unwrap_or(0);
         let content_indent = if let Some(explicit) = explicit_indent {
             base_indent + explicit
         } else {
@@ -2104,8 +2110,9 @@ impl BasicScanner {
         // Skip to next line
         self.skip_to_next_line()?;
 
-        // Determine indentation
-        let base_indent = self.current_indent;
+        // See scan_literal_block_scalar for why we read `indent_stack`
+        // rather than `current_indent`.
+        let base_indent = self.indent_stack.last().copied().unwrap_or(0);
         let content_indent = if let Some(explicit) = explicit_indent {
             base_indent + explicit
         } else {

@@ -1032,6 +1032,52 @@ impl BasicParser {
                     self.state = ParserState::DocumentContent;
                 }
 
+                // §3.2.1.1: a document has exactly one root node. A
+                // second top-level scalar in the same document (no
+                // intervening `---` / `...`) is invalid — e.g. \`word1
+                // # cmt\nword2\` after the comment breaks the first
+                // scalar (yaml-test-suite BS4K, BF9H, 8XDJ).
+                if matches!(self.state, ParserState::DocumentContent) {
+                    let after_doc_start = self
+                        .events
+                        .iter()
+                        .rev()
+                        .find(|e| {
+                            matches!(
+                                e.event_type,
+                                EventType::DocumentStart { .. }
+                                    | EventType::DocumentEnd { .. }
+                            )
+                        })
+                        .map_or(false, |e| matches!(
+                            e.event_type,
+                            EventType::DocumentStart { .. }
+                        ));
+                    if after_doc_start {
+                        let has_root_node = self.events.iter().rev().any(|e| {
+                            if matches!(
+                                e.event_type,
+                                EventType::DocumentStart { .. }
+                            ) {
+                                return false;
+                            }
+                            matches!(
+                                e.event_type,
+                                EventType::Scalar { .. }
+                                    | EventType::Alias { .. }
+                                    | EventType::MappingEnd
+                                    | EventType::SequenceEnd
+                            )
+                        });
+                        if has_root_node {
+                            return Err(Error::parse(
+                                token.start_position,
+                                "Document already contains a root node",
+                            ));
+                        }
+                    }
+                }
+
                 // Check if we're in a sequence and the next token is Value (indicating a mapping key)
                 if matches!(self.state, ParserState::BlockSequence) {
                     if let Ok(Some(next_token)) = self.scanner.peek_token() {

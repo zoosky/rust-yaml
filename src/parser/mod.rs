@@ -174,6 +174,11 @@ pub struct BasicParser {
     /// BlockMappingValue heuristic to tell apart "same-line value
     /// scalar" (6M2F) from "next-line sibling key" (6KGN).
     last_value_token_line: Option<usize>,
+    /// True while we're holding an explicit `?` key that has not yet
+    /// received its `:`. Used at end-of-stream to distinguish a
+    /// spec-legal `? key` with implicit empty value from a missing-`:`
+    /// bare scalar (yaml-test-suite 7MNF).
+    explicit_key_pending: bool,
 }
 
 /// Parser state for tracking context
@@ -225,6 +230,7 @@ impl BasicParser {
             tag_resolver: TagResolver::new(),
             defined_anchors: std::collections::HashSet::new(),
             last_value_token_line: None,
+            explicit_key_pending: false,
         }
     }
 
@@ -257,6 +263,7 @@ impl BasicParser {
             tag_resolver: TagResolver::new(),
             defined_anchors: std::collections::HashSet::new(),
             last_value_token_line: None,
+            explicit_key_pending: false,
         };
 
         // If there was a scanning error, store it for later propagation.
@@ -291,6 +298,7 @@ impl BasicParser {
             tag_resolver: TagResolver::new(),
             defined_anchors: std::collections::HashSet::new(),
             last_value_token_line: None,
+            explicit_key_pending: false,
         };
 
         parser.parse_all().unwrap_or(());
@@ -478,6 +486,19 @@ impl BasicParser {
                     return Err(Error::parse(
                         token.start_position,
                         "Unclosed flow collection at end of stream",
+                    ));
+                }
+                // YAML 1.2 §8.1.3.1: an implicit mapping key must be
+                // followed by `:`. A bare scalar at a mapping position
+                // with no \`:\` (and no explicit `?` marker) is invalid
+                // (yaml-test-suite 7MNF).
+                if matches!(self.state, ParserState::BlockMappingKey)
+                    && !self.explicit_key_pending
+                    && innermost_mapping_has_odd_children(&self.events)
+                {
+                    return Err(Error::parse(
+                        token.start_position,
+                        "Mapping key not followed by `:`",
                     ));
                 }
                 // YAML 1.2: an explicit `---` with NO body needs an
@@ -1131,6 +1152,7 @@ impl BasicParser {
 
             TokenType::Value => {
                 self.last_value_token_line = Some(token.start_position.line);
+                self.explicit_key_pending = false;
                 // YAML 1.2 §6.9.1: a `:` with no preceding key implies an
                 // empty key. Handle the four states where this can arise:
                 //   * ImplicitDocumentStart — open `+DOC`, `+MAP`, empty key.
@@ -1302,6 +1324,7 @@ impl BasicParser {
 
             // Complex key marker
             TokenType::Key => {
+                self.explicit_key_pending = true;
                 match self.state {
                     ParserState::ImplicitDocumentStart => {
                         // Start implicit document and mapping

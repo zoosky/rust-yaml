@@ -1491,11 +1491,24 @@ impl BasicScanner {
                         .push(Token::new(TokenType::FlowSequenceStart, pos, self.position));
                 }
                 ']' => {
+                    // YAML 1.2 §7.4: `]` is only valid inside an open
+                    // flow sequence. Stray `]` is a syntax error
+                    // (yaml-test-suite 4H7K).
+                    if self.flow_level == 0 {
+                        let context = ErrorContext::from_input(&self.input, &self.position, 2)
+                            .with_suggestion(
+                                "Remove the extra `]` or open a flow sequence with `[` first"
+                                    .to_string(),
+                            );
+                        return Err(Error::scan_with_context(
+                            self.position,
+                            "Unexpected `]` outside flow context",
+                            context,
+                        ));
+                    }
                     let pos = self.position;
                     self.advance();
-                    if self.flow_level > 0 {
-                        self.flow_level -= 1;
-                    }
+                    self.flow_level -= 1;
                     self.tokens
                         .push(Token::new(TokenType::FlowSequenceEnd, pos, self.position));
                 }
@@ -1510,11 +1523,21 @@ impl BasicScanner {
                         .push(Token::new(TokenType::FlowMappingStart, pos, self.position));
                 }
                 '}' => {
+                    if self.flow_level == 0 {
+                        let context = ErrorContext::from_input(&self.input, &self.position, 2)
+                            .with_suggestion(
+                                "Remove the extra `}` or open a flow mapping with `{` first"
+                                    .to_string(),
+                            );
+                        return Err(Error::scan_with_context(
+                            self.position,
+                            "Unexpected `}` outside flow context",
+                            context,
+                        ));
+                    }
                     let pos = self.position;
                     self.advance();
-                    if self.flow_level > 0 {
-                        self.flow_level -= 1;
-                    }
+                    self.flow_level -= 1;
                     self.tokens
                         .push(Token::new(TokenType::FlowMappingEnd, pos, self.position));
                 }

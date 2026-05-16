@@ -1005,6 +1005,22 @@ impl BasicParser {
                 // Determine what we're ending based on current state
                 match self.state {
                     ParserState::BlockSequence => {
+                        // §6.9: an anchor or tag left unused at the
+                        // close of the sequence belongs to an empty
+                        // scalar that is the final sequence item
+                        // (yaml-test-suite LE5A: \`- !!str\` produces
+                        // a tagged empty scalar before -SEQ).
+                        if self.pending_anchor.is_some() || self.pending_tag.is_some() {
+                            self.events.push(Event::scalar(
+                                token.start_position,
+                                self.pending_anchor.take(),
+                                self.pending_tag.take(),
+                                String::new(),
+                                true,
+                                false,
+                                ScalarStyle::Plain,
+                            ));
+                        }
                         self.events.push(Event::sequence_end(token.start_position));
                         // Pop previous state from stack if available
                         if let Some(prev_state) = self.state_stack.pop() {

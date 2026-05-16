@@ -7,12 +7,12 @@ Live tracker for closing the gap between rust-yaml and the yaml/yaml-test-suite
 
 | Metric          | Value          |
 | --------------- | -------------- |
-| Tests passing   | **441 / 735** (60.0 %) |
+| Tests passing   | **471 / 735** (64.1 %) |
 | Parser hangs    | 0 ✅           |
-| Wrong-reject    | 42             |
-| Wrong-accept    | 102            |
-| Wrong-events    | 150            |
-| Lib unit tests  | 174 passing    |
+| Wrong-reject    | 40             |
+| Wrong-accept    | 95             |
+| Wrong-events    | 129            |
+| Lib unit tests  | 177 passing    |
 
 Live results are written to `target/yaml-test-suite-failures.txt` after every
 `make test-yaml-suite` run. Categories: `Timeouts`, `Wrong reject`,
@@ -72,7 +72,7 @@ Session 4 commits (341 → 373 = +32):
 * `66597f2` Close open collections before final DocumentEnd at EOS (+6).
 * `2f3830f` Close open collections before explicit `...` DocumentEnd (+2).
 
-Session 5 commits (377 → 441 = +64):
+Session 5 commits (377 → 471 = +94):
 
 * `265ea5a` Implement §8.1.1.2 block-scalar chomping (clip/strip/keep)
   and fix `find_block_scalar_indent` single-line bug (+47, biggest
@@ -89,6 +89,29 @@ Session 5 commits (377 → 441 = +64):
   BlockMappingKey-even states; skip the "this scalar is a new key"
   heuristic immediately after a just-synthesised empty key (+5).
   60.0% milestone reached.
+* `efcc96c` Keep anchor on key when `BlockMappingStart` wraps an
+  implicit key — distinguish root-position implicit-key (anchor
+  goes to key) from value-position (anchor goes to mapping) (+10).
+* `955dedf` Preserve literal whitespace beyond `content_indent` on
+  blank lines in block scalars per §6.5 (+9).
+* `60c1072` Line-aware "scalar is value vs new key" heuristic: skip
+  the missing-value synthesis when the scalar shares a line with the
+  most recent `:` (yaml-test-suite 6M2F) (+2).
+* `21b947d` Reject unclosed flow collections at end-of-stream per
+  §7.4 — `[ [ a, b, c ]` and friends (+2).
+* `ddb83d2` Reject stray `]` / `}` outside flow context (+2).
+* `6d505f8` Reject block-scalar indent indicator `|0` per
+  §8.1.1.1 (+1).
+* `22fd82a` Reject leading or double commas in flow collections (+2).
+* `a0a8229` Block-scalar `content_indent` is leading-space count
+  (no `base_indent + 1` floor) per §8.1.1.1; unblocks block-scalar
+  content collection inside sequence items (net 0 passes, but
+  failure mode for 4QFQ/M6YH/P2AD now advances one event).
+* `d46528e` Drop the strict multiple-of-N indentation rule
+  (§6.1 has no such requirement) (+2). 64.1%.
+* `e3704b1` Pass `pending_anchor` / `pending_tag` to synthesised
+  empty mapping keys so anchored empty keys (\`&a : a\`) don't
+  leak into the next anchor check (net 0).
 
 ## Blocked clusters (need deeper refactors)
 

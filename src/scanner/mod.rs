@@ -1663,13 +1663,13 @@ impl BasicScanner {
                     }
                 }
 
-                // Quoted strings
-                '"' => {
-                    let token = self.scan_quoted_string('"')?;
-                    self.tokens.push(token);
-                }
-                '\'' => {
-                    let token = self.scan_quoted_string('\'')?;
+                // Quoted strings — same implicit-key mapping detection
+                // as for plain scalars (yaml-test-suite 6H3V, 6SLA).
+                '"' | '\'' => {
+                    if self.flow_level == 0 && self.check_for_mapping_ahead() {
+                        self.maybe_open_block_mapping_for_key()?;
+                    }
+                    let token = self.scan_quoted_string(ch)?;
                     self.tokens.push(token);
                 }
 
@@ -1740,45 +1740,8 @@ impl BasicScanner {
 
                 // Plain scalars
                 _ if self.is_plain_scalar_start() => {
-                    // Look ahead to see if this is a mapping key
-                    if self.flow_level == 0 {
-                        let should_start_mapping = self.check_for_mapping_ahead();
-                        if should_start_mapping {
-                            let last_indent = *self.indent_stack.last().unwrap();
-
-                            // Check if we should start a new mapping
-                            // Start a mapping if:
-                            // 1. No mapping is active at this indentation level, OR
-                            // 2. We're at a deeper indentation level (nested mapping)
-                            let should_start_new_mapping = if self.current_indent > last_indent {
-                                // Deeper indentation - start nested mapping
-                                true
-                            } else if self.current_indent == last_indent {
-                                // Same indentation - check if there's an active mapping at this level
-                                // We need to carefully track mapping contexts across BlockEnd tokens
-                                let has_active_mapping_at_this_level =
-                                    self.check_active_mapping_at_level(self.current_indent);
-                                !has_active_mapping_at_this_level
-                            } else {
-                                // Shallower indentation - should have been handled by handle_indentation
-                                false
-                            };
-
-                            if should_start_new_mapping {
-                                // Start mapping before processing the key
-                                self.indent_stack.push(self.current_indent);
-                                self.indent_is_sequence.push(false);
-                                // Check depth limit
-                                self.resource_tracker.check_depth(
-                                    &self.limits,
-                                    self.flow_level + self.indent_stack.len(),
-                                )?;
-                                self.tokens.push(Token::simple(
-                                    TokenType::BlockMappingStart,
-                                    self.position,
-                                ));
-                            }
-                        }
+                    if self.flow_level == 0 && self.check_for_mapping_ahead() {
+                        self.maybe_open_block_mapping_for_key()?;
                     }
 
                     let token = self.scan_plain_scalar()?;
@@ -2526,15 +2489,69 @@ impl BasicScanner {
         Ok(apply_chomping(content, chomping))
     }
 
+    /// Emit a `BlockMappingStart` token if the current position is the
+    /// start of an implicit key and no mapping is yet active at this
+    /// indent level. Shared by plain and quoted scalar dispatch.
+    fn maybe_open_block_mapping_for_key(&mut self) -> Result<()> {
+        let last_indent = *self.indent_stack.last().unwrap();
+        let should_start_new_mapping = if self.current_indent > last_indent {
+            true
+        } else if self.current_indent == last_indent {
+            !self.check_active_mapping_at_level(self.current_indent)
+        } else {
+            false
+        };
+        if should_start_new_mapping {
+            self.indent_stack.push(self.current_indent);
+            self.indent_is_sequence.push(false);
+            self.resource_tracker
+                .check_depth(&self.limits, self.flow_level + self.indent_stack.len())?;
+            self.tokens
+                .push(Token::simple(TokenType::BlockMappingStart, self.position));
+        }
+        Ok(())
+    }
+
     /// Look ahead on the current line for a `:` that marks a mapping key.
     ///
-    /// Per YAML 1.2 §7.3.3, a plain scalar may legally contain a `:` that
-    /// is not followed by whitespace (e.g. `key::sub: value`). Only `: `
-    /// (colon followed by whitespace or end-of-line) terminates the
-    /// scalar and signals a mapping. We therefore scan the whole line
-    /// for any qualifying `:`, rather than returning on the first one.
+    /// Per YAML 1.2 §7.3.3, a plain scalar may contain a `:` that is not
+    /// followed by whitespace. Only `: ` terminates the scalar. If the
+    /// line begins with `"` or `'`, the leading quoted scalar's contents
+    /// are scanned past (including `''` and `\"` escapes) before looking
+    /// for the `: ` that would make this scalar a key. This handles
+    /// yaml-test-suite 6H3V (`'foo: bar\': baz'`) and 6SLA.
     fn check_for_mapping_ahead(&self) -> bool {
-        for i in self.current_char_index..self.char_cache.len() {
+        let mut i = self.current_char_index;
+        let n = self.char_cache.len();
+        if i < n {
+            let first = self.char_cache[i];
+            if first == '\'' || first == '"' {
+                let quote = first;
+                i += 1;
+                while i < n {
+                    let c = self.char_cache[i];
+                    if c == '\n' || c == '\r' {
+                        return false; // unterminated quote on line
+                    }
+                    if quote == '\'' && c == '\'' && self.char_cache.get(i + 1) == Some(&'\'') {
+                        // `''` is the in-string single-quote escape.
+                        i += 2;
+                        continue;
+                    }
+                    if quote == '"' && c == '\\' {
+                        // Skip the escaped char.
+                        i += 2;
+                        continue;
+                    }
+                    if c == quote {
+                        i += 1;
+                        break;
+                    }
+                    i += 1;
+                }
+            }
+        }
+        while i < n {
             let ch = self.char_cache[i];
             match ch {
                 '\n' | '\r' => return false,
@@ -2543,11 +2560,12 @@ impl BasicScanner {
                     match next {
                         None => return true,
                         Some(c) if c.is_whitespace() => return true,
-                        _ => { /* inner colon, keep scanning */ }
+                        _ => {}
                     }
                 }
                 _ => {}
             }
+            i += 1;
         }
         false
     }

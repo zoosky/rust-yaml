@@ -179,6 +179,10 @@ pub struct BasicParser {
     /// spec-legal `? key` with implicit empty value from a missing-`:`
     /// bare scalar (yaml-test-suite 7MNF).
     explicit_key_pending: bool,
+    /// Counts implicit single-pair flow mappings still open. A `,` or
+    /// `]` while this is > 0 closes the innermost implicit mapping
+    /// before continuing the outer flow sequence (§7.5).
+    implicit_flow_pair_depth: usize,
 }
 
 /// Parser state for tracking context
@@ -231,6 +235,7 @@ impl BasicParser {
             defined_anchors: std::collections::HashSet::new(),
             last_value_token_line: None,
             explicit_key_pending: false,
+            implicit_flow_pair_depth: 0,
         }
     }
 
@@ -264,6 +269,7 @@ impl BasicParser {
             defined_anchors: std::collections::HashSet::new(),
             last_value_token_line: None,
             explicit_key_pending: false,
+            implicit_flow_pair_depth: 0,
         };
 
         // If there was a scanning error, store it for later propagation.
@@ -299,6 +305,7 @@ impl BasicParser {
             defined_anchors: std::collections::HashSet::new(),
             last_value_token_line: None,
             explicit_key_pending: false,
+            implicit_flow_pair_depth: 0,
         };
 
         parser.parse_all().unwrap_or(());
@@ -865,6 +872,32 @@ impl BasicParser {
             }
 
             TokenType::FlowSequenceEnd => {
+                // §7.5: close an open implicit single-pair flow mapping
+                // before the outer flow sequence ends.
+                if self.implicit_flow_pair_depth > 0
+                    && matches!(
+                        self.state,
+                        ParserState::FlowMapping
+                            | ParserState::FlowMappingKey
+                            | ParserState::FlowMappingValue
+                    )
+                    && matches!(self.state_stack.last(), Some(ParserState::FlowSequence))
+                {
+                    if innermost_mapping_has_odd_children(&self.events) {
+                        self.events.push(Event::scalar(
+                            token.start_position,
+                            None,
+                            None,
+                            String::new(),
+                            true,
+                            false,
+                            ScalarStyle::Plain,
+                        ));
+                    }
+                    self.events.push(Event::mapping_end(token.start_position));
+                    self.state = self.state_stack.pop().unwrap();
+                    self.implicit_flow_pair_depth -= 1;
+                }
                 self.events.push(Event::sequence_end(token.start_position));
 
                 // Restore the previous state from the stack if available
@@ -1003,6 +1036,25 @@ impl BasicParser {
                                 false,
                             ));
                             self.state = ParserState::BlockMappingKey;
+                        }
+                    }
+                }
+
+                // §7.5: a flow-sequence entry that is itself `key: value`
+                // is an implicit single-pair flow mapping
+                // (yaml-test-suite QF4Y, L9U5, 87E4, 8UDB, 9MMW, LX3P).
+                if matches!(self.state, ParserState::FlowSequence) {
+                    if let Ok(Some(next_token)) = self.scanner.peek_token() {
+                        if matches!(next_token.token_type, TokenType::Value) {
+                            self.state_stack.push(self.state);
+                            self.events.push(Event::mapping_start(
+                                token.start_position,
+                                self.pending_anchor.take(),
+                                self.pending_tag.take(),
+                                true,
+                            ));
+                            self.state = ParserState::FlowMappingKey;
+                            self.implicit_flow_pair_depth += 1;
                         }
                     }
                 }
@@ -1290,6 +1342,33 @@ impl BasicParser {
                         ScalarStyle::Plain,
                     ));
                     self.state = ParserState::FlowMapping;
+                }
+
+                // §7.5: same close-on-comma logic for implicit
+                // single-pair mappings.
+                if self.implicit_flow_pair_depth > 0
+                    && matches!(
+                        self.state,
+                        ParserState::FlowMapping
+                            | ParserState::FlowMappingKey
+                            | ParserState::FlowMappingValue
+                    )
+                    && matches!(self.state_stack.last(), Some(ParserState::FlowSequence))
+                {
+                    if innermost_mapping_has_odd_children(&self.events) {
+                        self.events.push(Event::scalar(
+                            token.start_position,
+                            None,
+                            None,
+                            String::new(),
+                            true,
+                            false,
+                            ScalarStyle::Plain,
+                        ));
+                    }
+                    self.events.push(Event::mapping_end(token.start_position));
+                    self.state = self.state_stack.pop().unwrap();
+                    self.implicit_flow_pair_depth -= 1;
                 }
             }
 

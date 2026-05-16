@@ -1179,6 +1179,7 @@ name = "yaml-test-suite"
 version = "0.0.0"
 dependencies = [
  "rust-yaml",
+ "tempfile",
 ]
 
 [[package]]

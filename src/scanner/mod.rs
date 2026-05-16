@@ -309,30 +309,15 @@ impl BasicScanner {
             self.analyze_indentation_pattern(indent, has_tabs, has_spaces)?;
         }
 
-        // Perform strict indentation validation if we have established a style
-        if let Some(crate::value::IndentStyle::Spaces(width)) = self.detected_indent_style {
-            if indent > 0 && indent % width != 0 {
-                // Check if this is a valid nested level or inconsistent indentation
-                let is_valid_nesting = self.is_valid_indentation_level(indent);
-                if !is_valid_nesting {
-                    let lower_level = (indent / width) * width;
-                    let higher_level = lower_level + width;
-                    let suggestion = format!(
-                        "Inconsistent indentation detected. Expected multiples of {} spaces. Use {} or {} spaces instead of {}",
-                        width, lower_level, higher_level, indent
-                    );
-                    let context =
-                        crate::error::ErrorContext::from_input(&self.input, &self.position, 4)
-                            .with_suggestion(suggestion);
-                    return Err(Error::indentation_with_context(
-                        self.position,
-                        lower_level,
-                        indent,
-                        context,
-                    ));
-                }
-            }
-        }
+        // YAML 1.2 §6.1 does NOT require all indents to be multiples
+        // of a single "indent width". Siblings must share a column;
+        // children must indent further; but any positive amount works
+        // (e.g. `key:\n  child:\n   grandchild:` with widths 2, 1
+        // is legal). The earlier strict-multiple-of-N check rejected
+        // valid spec fixtures like 6HB6, 8G76, A2M4, P94K, Q9WF,
+        // UGM3. We rely on the indent_stack-driven open/close logic
+        // (and the per-block "more than parent" rule enforced
+        // elsewhere) to catch genuine mis-indentation.
 
         // Update previous indentation level for future comparisons
         if indent > 0 {

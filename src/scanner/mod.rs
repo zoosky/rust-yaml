@@ -498,8 +498,19 @@ impl BasicScanner {
     /// Check if current position starts a plain scalar
     fn is_plain_scalar_start(&self) -> bool {
         self.current_char.map_or(false, |ch| match ch {
-            '-' | '?' | ':' | ',' | '[' | ']' | '{' | '}' | '#' | '&' | '*' | '!' | '|' | '>'
-            | '\'' | '"' | '%' | '@' | '`' => false,
+            // Pure indicators — never start a plain scalar.
+            ',' | '[' | ']' | '{' | '}' | '#' | '&' | '*' | '!' | '|' | '>' | '\'' | '"' | '%'
+            | '@' | '`' => false,
+            // YAML 1.2 §7.3.3: `?`, `:`, `-` may start a plain scalar when
+            // the next character is non-whitespace (and, in flow context,
+            // not a flow indicator). Otherwise they act as indicators
+            // (complex-key marker / value separator / block-entry marker).
+            '?' | ':' | '-' => match self.peek_char(1) {
+                None => false,
+                Some(c) if c.is_whitespace() => false,
+                Some(c) if self.flow_level > 0 && ",[]{}".contains(c) => false,
+                Some(_) => true,
+            },
             _ => !ch.is_whitespace(),
         })
     }
@@ -1166,8 +1177,16 @@ impl BasicScanner {
                         .push(Token::new(TokenType::FlowEntry, pos, self.position));
                 }
 
-                // Key-value separator
-                ':' => {
+                // Key-value separator. YAML 1.2 §7.3.3: `:` only separates
+                // key from value when followed by whitespace / EOF (or, in
+                // flow context, a flow indicator). Otherwise it's part of a
+                // plain scalar (e.g. `:foo` or `URL://path`).
+                ':' if self
+                    .peek_char(1)
+                    .map_or(true, |c| {
+                        c.is_whitespace() || (self.flow_level > 0 && ",[]{}".contains(c))
+                    }) =>
+                {
                     let pos = self.position;
                     self.advance();
                     self.tokens
@@ -2168,6 +2187,40 @@ mod tests {
             starts_with_dashes,
             "expected a plain scalar starting with `---`, got events: {events:?}"
         );
+    }
+
+    /// YAML 1.2 §7.3.3: `?`, `:`, and `-` may start a plain scalar provided
+    /// the next character is non-space (and, in flow context, not a flow
+    /// indicator). The previous `is_plain_scalar_start` unconditionally
+    /// rejected those three characters, so plain scalars like `?foo`,
+    /// `:foo`, `-foo` were reported as `Invalid character`.
+    /// Tracked by yaml-test-suite 2EBW.
+    #[test]
+    fn question_mark_followed_by_text_starts_plain_scalar() {
+        use crate::parser::{BasicParser, EventType, Parser as ParserTrait};
+        let mut p = BasicParser::new_eager("?foo: bar\n".to_string());
+        assert!(p.take_scanning_error().is_none());
+        let mut keys = Vec::new();
+        while let Ok(Some(ev)) = p.get_event() {
+            if let EventType::Scalar { value, .. } = ev.event_type {
+                keys.push(value);
+            }
+        }
+        assert_eq!(keys, vec!["?foo", "bar"]);
+    }
+
+    #[test]
+    fn colon_followed_by_text_starts_plain_scalar() {
+        use crate::parser::{BasicParser, EventType, Parser as ParserTrait};
+        let mut p = BasicParser::new_eager(":foo: bar\n".to_string());
+        assert!(p.take_scanning_error().is_none());
+        let mut keys = Vec::new();
+        while let Ok(Some(ev)) = p.get_event() {
+            if let EventType::Scalar { value, .. } = ev.event_type {
+                keys.push(value);
+            }
+        }
+        assert_eq!(keys, vec![":foo", "bar"]);
     }
 
     /// YAML 1.2 §5.6 / RFC 3986 percent-encoding: tag suffixes may contain

@@ -517,6 +517,10 @@ impl BasicParser {
                         false,
                         ScalarStyle::Plain,
                     ));
+                } else {
+                    // Flush any still-open block collections so the
+                    // event stream is balanced before -DOC.
+                    close_open_collections(&mut self.events, token.start_position);
                 }
                 self.events
                     .push(Event::document_end(token.start_position, false));

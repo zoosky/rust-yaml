@@ -1361,15 +1361,29 @@ impl BasicScanner {
                         .push(Token::new(TokenType::FlowEntry, pos, self.position));
                 }
 
-                // Key-value separator. YAML 1.2 §7.3.3: `:` only separates
-                // key from value when followed by whitespace / EOF (or, in
-                // flow context, a flow indicator). Otherwise it's part of a
-                // plain scalar (e.g. `:foo` or `URL://path`).
+                // Key-value separator. YAML 1.2 §7.3.3 / §7.4:
+                //   * Block context: `:` separates key from value only when
+                //     followed by whitespace / EOF — otherwise it's part of
+                //     a plain scalar (e.g. `:foo`, `URL://path`).
+                //   * Flow context: same, plus `:` may be adjacent to a
+                //     value when the previous token completed a key node
+                //     (quoted/plain scalar, alias, or closed flow
+                //     collection) — see yaml-test-suite 5MUD, 5T43.
                 ':' if self
                     .peek_char(1)
                     .map_or(true, |c| {
                         c.is_whitespace() || (self.flow_level > 0 && ",[]{}".contains(c))
-                    }) =>
+                    })
+                    || (self.flow_level > 0
+                        && matches!(
+                            self.tokens.last().map(|t| &t.token_type),
+                            Some(
+                                TokenType::Scalar(_, _)
+                                    | TokenType::Alias(_)
+                                    | TokenType::FlowMappingEnd
+                                    | TokenType::FlowSequenceEnd
+                            )
+                        )) =>
                 {
                     let pos = self.position;
                     self.advance();

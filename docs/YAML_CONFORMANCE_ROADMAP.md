@@ -7,11 +7,11 @@ Live tracker for closing the gap between rust-yaml and the yaml/yaml-test-suite
 
 | Metric          | Value          |
 | --------------- | -------------- |
-| Tests passing   | **471 / 735** (64.1 %) |
+| Tests passing   | **483 / 735** (65.7 %) |
 | Parser hangs    | 0 ✅           |
 | Wrong-reject    | 40             |
 | Wrong-accept    | 95             |
-| Wrong-events    | 129            |
+| Wrong-events    | 117            |
 | Lib unit tests  | 177 passing    |
 
 Live results are written to `target/yaml-test-suite-failures.txt` after every
@@ -72,7 +72,7 @@ Session 4 commits (341 → 373 = +32):
 * `66597f2` Close open collections before final DocumentEnd at EOS (+6).
 * `2f3830f` Close open collections before explicit `...` DocumentEnd (+2).
 
-Session 5 commits (377 → 471 = +94):
+Session 5 commits (377 → 483 = +106):
 
 * `265ea5a` Implement §8.1.1.2 block-scalar chomping (clip/strip/keep)
   and fix `find_block_scalar_indent` single-line bug (+47, biggest
@@ -112,6 +112,14 @@ Session 5 commits (377 → 471 = +94):
 * `e3704b1` Pass `pending_anchor` / `pending_tag` to synthesised
   empty mapping keys so anchored empty keys (\`&a : a\`) don't
   leak into the next anchor check (net 0).
+* `da173eb` Detect leading quoted scalars as implicit mapping
+  keys — `check_for_mapping_ahead` scans past the leading quote
+  (with `''` and `\"` escape handling) before searching for `:`;
+  shared the BMS-opening logic into `maybe_open_block_mapping_for_key`.
+  Fixes 6H3V, 6SLA, 87E4-like cases (+6).
+* `262c98f` Trim trailing whitespace before plain-scalar fold so
+  `a\nb  \n  c\nd\n\ne` folds to `a b c d\ne` instead of leaking
+  the trailing spaces (+6). 65.7%.
 
 ## Blocked clusters (need deeper refactors)
 

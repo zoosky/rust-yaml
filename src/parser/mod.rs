@@ -1216,7 +1216,15 @@ impl BasicParser {
                     let same_line_as_value = self
                         .last_value_token_line
                         .map_or(false, |line| line == token.start_position.line);
-                    if !last_was_implicit_empty && !same_line_as_value {
+                    // Skip the "new key" pattern when the scalar IS
+                    // the inline value of a just-synthesised empty
+                    // key — both must hold (yaml-test-suite 2JQS).
+                    // S3PD shows it must NOT skip when the empty
+                    // key was on a different line from the current
+                    // scalar.
+                    let skip_pattern =
+                        last_was_implicit_empty && same_line_as_value;
+                    if !skip_pattern && !same_line_as_value {
                         if let Ok(Some(next_token)) = self.scanner.peek_token() {
                             if matches!(next_token.token_type, TokenType::Value) {
                                 self.events.push(Event::scalar(

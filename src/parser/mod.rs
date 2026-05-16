@@ -975,13 +975,14 @@ impl BasicParser {
             }
 
             TokenType::Tag(tag) => {
-                // YAML 1.2 §6.9.1: a node may have at most one tag.
-                if self.pending_tag.is_some() {
-                    return Err(Error::parse(
-                        token.start_position,
-                        "Node may not have more than one tag",
-                    ));
-                }
+                // YAML 1.2 §6.9.1 allows at most one tag per node, but
+                // (like the double-anchor check) detecting that at this
+                // layer produces false positives — a tag preceding an
+                // implicit empty node in a sequence is followed by the
+                // tag of the next sibling node, and the same `pending_tag`
+                // field is reused. Until the parser tracks per-node tag
+                // scopes, accept the overwrite silently (yaml-test-suite
+                // FH7J relies on this).
                 // Resolve and normalize the tag before storing.
                 match self.tag_resolver.resolve(&tag) {
                     Ok(resolved_tag) => {

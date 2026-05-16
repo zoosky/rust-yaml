@@ -851,6 +851,30 @@ impl BasicParser {
                     }
                 }
 
+                // YAML 1.2: if we're in BlockMappingValue and the next
+                // token is `:` (Value), the current scalar is actually a
+                // NEW KEY — the previous key's value is implicit empty
+                // (yaml-test-suite 6KGN: `a: &anchor\nb: *anchor`).
+                // Emit the empty value first (consuming any pending
+                // anchor/tag — those were intended for the missing
+                // value), then transition back to BlockMappingKey.
+                if matches!(self.state, ParserState::BlockMappingValue) {
+                    if let Ok(Some(next_token)) = self.scanner.peek_token() {
+                        if matches!(next_token.token_type, TokenType::Value) {
+                            self.events.push(Event::scalar(
+                                token.start_position,
+                                self.pending_anchor.take(),
+                                self.pending_tag.take(),
+                                String::new(),
+                                true,
+                                false,
+                                ScalarStyle::Plain,
+                            ));
+                            self.state = ParserState::BlockMappingKey;
+                        }
+                    }
+                }
+
                 // Convert QuoteStyle to ScalarStyle
                 let style = match quote_style {
                     crate::scanner::QuoteStyle::Plain => ScalarStyle::Plain,

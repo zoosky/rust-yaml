@@ -848,13 +848,19 @@ impl BasicParser {
             }
 
             TokenType::Tag(tag) => {
-                // Resolve and normalize the tag before storing
+                // YAML 1.2 §6.9.1: a node may have at most one tag.
+                if self.pending_tag.is_some() {
+                    return Err(Error::parse(
+                        token.start_position,
+                        "Node may not have more than one tag",
+                    ));
+                }
+                // Resolve and normalize the tag before storing.
                 match self.tag_resolver.resolve(&tag) {
                     Ok(resolved_tag) => {
                         self.pending_tag = Some(resolved_tag.uri);
                     }
                     Err(_) => {
-                        // If tag resolution fails, store the original tag
                         self.pending_tag = Some(tag.clone());
                     }
                 }

@@ -30,6 +30,59 @@ pub trait Parser {
     fn position(&self) -> Position;
 }
 
+/// Walks back through `events` looking for an unclosed `DocumentStart`
+/// (i.e. one without a matching `DocumentEnd` after it). Returns true if
+/// the parser is still inside a document.
+fn has_open_document(events: &[Event]) -> bool {
+    for ev in events.iter().rev() {
+        match &ev.event_type {
+            EventType::DocumentEnd { .. } => return false,
+            EventType::DocumentStart { .. } => return true,
+            _ => {}
+        }
+    }
+    false
+}
+
+/// Emit `MappingEnd` / `SequenceEnd` events to close any unbalanced
+/// collection starts in `events`. Called before emitting a `DocumentEnd`
+/// when an outer construct (e.g. a new `---` marker) forces the previous
+/// document closed without going through the usual indent-driven
+/// `BlockEnd` token path. Tracks balance via a counter and emits the
+/// needed end events in inside-out order.
+fn close_open_collections(events: &mut Vec<Event>, pos: Position) {
+    // Count net unclosed starts since the last DocumentStart, in order.
+    let mut stack: Vec<&'static str> = Vec::new();
+    let mut depth_doc = 0;
+    for ev in events.iter() {
+        match &ev.event_type {
+            EventType::DocumentStart { .. } => {
+                depth_doc += 1;
+                stack.clear();
+            }
+            EventType::DocumentEnd { .. } => {
+                if depth_doc > 0 {
+                    depth_doc -= 1;
+                }
+                stack.clear();
+            }
+            EventType::MappingStart { .. } => stack.push("map"),
+            EventType::SequenceStart { .. } => stack.push("seq"),
+            EventType::MappingEnd | EventType::SequenceEnd => {
+                stack.pop();
+            }
+            _ => {}
+        }
+    }
+    while let Some(kind) = stack.pop() {
+        match kind {
+            "map" => events.push(Event::mapping_end(pos)),
+            "seq" => events.push(Event::sequence_end(pos)),
+            _ => {}
+        }
+    }
+}
+
 /// Basic parser implementation that converts tokens to events
 #[derive(Debug)]
 pub struct BasicParser {
@@ -406,8 +459,7 @@ impl BasicParser {
             TokenType::DocumentStart => {
                 // If the most-recent event is still `DocumentStart`, the
                 // previous document had no body — emit an implicit empty
-                // scalar and close it before opening a new one (yaml-test-
-                // suite 6XDY).
+                // scalar before closing it (yaml-test-suite 6XDY).
                 if matches!(
                     self.events.last().map(|e| &e.event_type),
                     Some(EventType::DocumentStart { .. })
@@ -423,10 +475,11 @@ impl BasicParser {
                     ));
                     self.events
                         .push(Event::document_end(token.start_position, true));
-                } else if matches!(
-                    self.state,
-                    ParserState::DocumentContent | ParserState::BlockNode
-                ) {
+                } else if has_open_document(&self.events) {
+                    // The previous document is still open — its outer
+                    // collection(s) and the document itself need closing
+                    // before the new `---` (yaml-test-suite 35KP).
+                    close_open_collections(&mut self.events, token.start_position);
                     self.events
                         .push(Event::document_end(token.start_position, true));
                 }

@@ -1943,10 +1943,24 @@ impl BasicScanner {
                     // Letters follow the digits — not a pure number (e.g. 500m, 128Mi)
                     return false;
                 }
-                _ => {
-                    // Whitespace, newline, colon, EOF, etc. — end of token
-                    return has_digit;
+                Some(c) => {
+                    // For a token to be a pure number, it must be
+                    // terminated by an actual end-of-token marker:
+                    // whitespace, newline, EOF, or a flow indicator
+                    // when we're in flow context. `:` is special — it
+                    // ends a number ONLY when followed by whitespace
+                    // (otherwise the scalar might be `20:03:20`,
+                    // yaml-test-suite U9NS).
+                    if c.is_whitespace() || (self.flow_level > 0 && ",[]{}".contains(c)) {
+                        return has_digit;
+                    }
+                    if c == ':' {
+                        let next = self.peek_char(offset + 1);
+                        return has_digit && next.map_or(true, |nc| nc.is_whitespace());
+                    }
+                    return false;
                 }
+                None => return has_digit,
             }
         }
     }

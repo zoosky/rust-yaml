@@ -46,6 +46,12 @@ pub struct BasicParser {
     yaml_version: Option<(u8, u8)>,
     tag_directives: Vec<(String, String)>,
     tag_resolver: TagResolver,
+    /// Anchor names that have been defined so far in the stream. Used to
+    /// validate that aliases (`*name`) reference a known anchor (YAML 1.2
+    /// §6.9.2). Forward references are forbidden, and we never reset this
+    /// set — once defined, an anchor remains referenceable for the rest of
+    /// the parse, matching common loader semantics.
+    defined_anchors: std::collections::HashSet<String>,
 }
 
 /// Parser state for tracking context
@@ -95,6 +101,7 @@ impl BasicParser {
             yaml_version: None,
             tag_directives: Vec::new(),
             tag_resolver: TagResolver::new(),
+            defined_anchors: std::collections::HashSet::new(),
         }
     }
 
@@ -125,6 +132,7 @@ impl BasicParser {
             yaml_version: None,
             tag_directives: Vec::new(),
             tag_resolver: TagResolver::new(),
+            defined_anchors: std::collections::HashSet::new(),
         };
 
         // If there was a scanning error, store it for later propagation
@@ -156,6 +164,7 @@ impl BasicParser {
             yaml_version: None,
             tag_directives: Vec::new(),
             tag_resolver: TagResolver::new(),
+            defined_anchors: std::collections::HashSet::new(),
         };
 
         parser.parse_all().unwrap_or(());
@@ -825,10 +834,22 @@ impl BasicParser {
                         "Node may not have more than one anchor",
                     ));
                 }
+                // Record the anchor name so subsequent aliases can be
+                // validated against it (YAML 1.2 §6.9.2 forbids forward
+                // references).
+                self.defined_anchors.insert(name.clone());
                 self.pending_anchor = Some(name.clone());
             }
 
             TokenType::Alias(name) => {
+                // YAML 1.2 §6.9.2: alias must reference a previously
+                // defined anchor — forward references are invalid.
+                if !self.defined_anchors.contains(name.as_str()) {
+                    return Err(Error::parse(
+                        token.start_position,
+                        format!("Alias `*{name}` references an undefined anchor"),
+                    ));
+                }
                 if matches!(self.state, ParserState::ImplicitDocumentStart) {
                     self.events.push(Event::document_start(
                         token.start_position,

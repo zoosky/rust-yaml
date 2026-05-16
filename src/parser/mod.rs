@@ -645,6 +645,15 @@ impl BasicParser {
             }
 
             TokenType::DocumentEnd => {
+                // §6.8: `...` only terminates an *open* document. If
+                // the stream so far has no DocumentStart (e.g. the
+                // input is just `...\n`, yaml-test-suite HWV9), the
+                // marker is a no-op.
+                if !has_open_document(&self.events) {
+                    self.state = ParserState::ImplicitDocumentStart;
+                    self.last_token_type = token_type_for_tracking;
+                    return Ok(());
+                }
                 // Same empty-doc fixup as in DocumentStart/StreamEnd:
                 // `---\n...` needs an implicit empty scalar.
                 if matches!(

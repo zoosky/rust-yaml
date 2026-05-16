@@ -1664,9 +1664,16 @@ impl BasicScanner {
                 self.advance(); // Skip second '!'
             }
 
-            // Scan tag name/suffix
+            // Scan tag name/suffix.
+            //
+            // Per YAML 1.2 §5.6, tag suffixes are URI references — they may
+            // contain any URI character (RFC 3986 unreserved + sub-delims +
+            // a few others) or `%XX` percent-encoded bytes. The handful of
+            // characters listed below covers the alphanumeric + URI-safe
+            // punctuation set used by yaml-test-suite. Percent decoding of
+            // `%XX` happens later in `TagResolver::resolve`.
             while let Some(ch) = self.current_char {
-                if ch.is_alphanumeric() || "-./_:".contains(ch) {
+                if ch.is_alphanumeric() || "-._~:/?#[]@!$&'()*+,;=%".contains(ch) {
                     tag.push(ch);
                     self.advance();
                 } else {
@@ -2161,6 +2168,27 @@ mod tests {
             starts_with_dashes,
             "expected a plain scalar starting with `---`, got events: {events:?}"
         );
+    }
+
+    /// YAML 1.2 §5.6 / RFC 3986 percent-encoding: tag suffixes may contain
+    /// `%XX` percent-escaped characters, which must be URI-decoded when
+    /// resolved. The scanner used to reject `%` in tag suffixes as
+    /// "Invalid character", so e.g. `!e!tag%21 baz` failed before the
+    /// resolver got a chance to decode it. Tracked by yaml-test-suite 6CK3.
+    #[test]
+    fn tag_suffix_with_percent_escape_resolves_to_decoded_uri() {
+        use crate::parser::{BasicParser, EventType, Parser as ParserTrait};
+        let mut p = BasicParser::new_eager(
+            "%TAG !e! tag:example.com,2000:app/\n---\n- !e!tag%21 baz\n".to_string(),
+        );
+        assert!(p.take_scanning_error().is_none(), "tag percent-escapes must not error");
+        let mut tags = Vec::new();
+        while let Ok(Some(ev)) = p.get_event() {
+            if let EventType::Scalar { tag: Some(t), .. } = ev.event_type {
+                tags.push(t);
+            }
+        }
+        assert_eq!(tags, vec!["tag:example.com,2000:app/tag!"]);
     }
 
     /// YAML 1.2 §6.8.4: "A YAML processor should ignore any directive it

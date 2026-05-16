@@ -7,6 +7,34 @@ use crate::{Error, Result, Value};
 use std::collections::HashMap;
 use std::fmt;
 
+/// URI percent-decode `%XX` escape sequences in a tag suffix.
+///
+/// Invalid escapes (incomplete or non-hex) are passed through verbatim so the
+/// scanner-level acceptance stays decoupled from strict URI validation. Pure
+/// helper; no allocation when the input contains no `%`.
+fn percent_decode(s: &str) -> String {
+    if !s.contains('%') {
+        return s.to_string();
+    }
+    let bytes = s.as_bytes();
+    let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            let hi = (bytes[i + 1] as char).to_digit(16);
+            let lo = (bytes[i + 2] as char).to_digit(16);
+            if let (Some(h), Some(l)) = (hi, lo) {
+                out.push(((h << 4) | l) as u8);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
 /// Tag handle types as defined in YAML 1.2 spec
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TagHandle {
@@ -144,7 +172,7 @@ impl TagResolver {
                 .get("!!")
                 .cloned()
                 .unwrap_or_else(|| "tag:yaml.org,2002:".to_string());
-            (format!("{}{}", prefix, suffix), tag_str.to_string())
+            (format!("{}{}", prefix, percent_decode(suffix)), tag_str.to_string())
         } else if tag_str.starts_with('!') {
             // Check for named handle
             if let Some(end) = tag_str[1..].find('!') {
@@ -153,7 +181,7 @@ impl TagResolver {
                 let suffix = &tag_str[end + 2..];
 
                 if let Some(prefix) = self.directives.get(&handle) {
-                    (format!("{}{}", prefix, suffix), tag_str.to_string())
+                    (format!("{}{}", prefix, percent_decode(suffix)), tag_str.to_string())
                 } else {
                     // Unknown named handle, treat as primary
                     let prefix = self
@@ -161,7 +189,10 @@ impl TagResolver {
                         .get("!")
                         .cloned()
                         .unwrap_or_else(|| "!".to_string());
-                    (format!("{}{}", prefix, &tag_str[1..]), tag_str.to_string())
+                    (
+                        format!("{}{}", prefix, percent_decode(&tag_str[1..])),
+                        tag_str.to_string(),
+                    )
                 }
             } else {
                 // Primary handle
@@ -171,7 +202,7 @@ impl TagResolver {
                     .get("!")
                     .cloned()
                     .unwrap_or_else(|| "!".to_string());
-                (format!("{}{}", prefix, suffix), tag_str.to_string())
+                (format!("{}{}", prefix, percent_decode(suffix)), tag_str.to_string())
             }
         } else {
             // No tag prefix, use implicit tagging based on schema

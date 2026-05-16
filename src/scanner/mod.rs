@@ -901,6 +901,13 @@ impl BasicScanner {
             && self.peek_char(2) == Some('-')
             && self.peek_char(3).map_or(true, |c| c.is_whitespace())
         {
+            // Doc markers are invalid inside flow collections.
+            if self.flow_level > 0 {
+                return Err(Error::scan(
+                    self.position,
+                    "`---` document-start marker is not allowed inside a flow collection".to_string(),
+                ));
+            }
             let start_pos = self.position;
             self.advance(); // -
             self.advance(); // -
@@ -1150,6 +1157,13 @@ impl BasicScanner {
             && self.peek_char(2) == Some('.')
             && self.peek_char(3).map_or(true, |c| c.is_whitespace())
         {
+            // Doc markers are invalid inside flow collections.
+            if self.flow_level > 0 {
+                return Err(Error::scan(
+                    self.position,
+                    "`...` document-end marker is not allowed inside a flow collection".to_string(),
+                ));
+            }
             let start_pos = self.position;
             self.advance(); // .
             self.advance(); // .

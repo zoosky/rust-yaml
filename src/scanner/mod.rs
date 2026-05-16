@@ -2179,6 +2179,20 @@ impl BasicScanner {
                             context,
                         ));
                     }
+                    // YAML 1.2 §8.1.1.1: explicit indent indicator is
+                    // 1..=9. `|0` and `>0` are invalid
+                    // (yaml-test-suite 2G84/00).
+                    if digit == 0 {
+                        let context = ErrorContext::from_input(&self.input, &self.position, 2)
+                            .with_suggestion(
+                                "Block-scalar indent indicator must be 1-9".to_string(),
+                            );
+                        return Err(Error::scan_with_context(
+                            self.position,
+                            "Block-scalar indent indicator `0` is invalid",
+                            context,
+                        ));
+                    }
                     explicit_indent = Some(digit);
                     self.advance();
                 }

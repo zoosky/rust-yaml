@@ -150,6 +150,10 @@ pub struct BasicParser {
     /// set — once defined, an anchor remains referenceable for the rest of
     /// the parse, matching common loader semantics.
     defined_anchors: std::collections::HashSet<String>,
+    /// Line of the most recent `:` Value token. Used by the
+    /// BlockMappingValue heuristic to tell apart "same-line value
+    /// scalar" (6M2F) from "next-line sibling key" (6KGN).
+    last_value_token_line: Option<usize>,
 }
 
 /// Parser state for tracking context
@@ -200,6 +204,7 @@ impl BasicParser {
             tag_directives: Vec::new(),
             tag_resolver: TagResolver::new(),
             defined_anchors: std::collections::HashSet::new(),
+            last_value_token_line: None,
         }
     }
 
@@ -231,6 +236,7 @@ impl BasicParser {
             tag_directives: Vec::new(),
             tag_resolver: TagResolver::new(),
             defined_anchors: std::collections::HashSet::new(),
+            last_value_token_line: None,
         };
 
         // If there was a scanning error, store it for later propagation.
@@ -264,6 +270,7 @@ impl BasicParser {
             tag_directives: Vec::new(),
             tag_resolver: TagResolver::new(),
             defined_anchors: std::collections::HashSet::new(),
+            last_value_token_line: None,
         };
 
         parser.parse_all().unwrap_or(());
@@ -928,10 +935,14 @@ impl BasicParser {
                 // anchor/tag — those were intended for the missing
                 // value), then transition back to BlockMappingKey.
                 //
-                // BUT: if the most recent event was an implicit empty
-                // scalar (e.g. we just synthesised an empty key for a
-                // leading-`:` mapping entry, 2JQS), this scalar is the
-                // VALUE for that empty key and not a new key.
+                // BUT skip the heuristic when:
+                //   * the most recent event was an implicit empty scalar
+                //     (we just synthesised an empty key for a leading-`:`
+                //     mapping, yaml-test-suite 2JQS), or
+                //   * the current scalar is on the SAME line as the
+                //     previous `:` Value token — that puts the scalar
+                //     in the value slot of the current key
+                //     (yaml-test-suite 6M2F: `? &a a\n: &b b\n: *a`).
                 if matches!(self.state, ParserState::BlockMappingValue) {
                     let last_was_implicit_empty =
                         matches!(self.events.last(), Some(ev) if matches!(
@@ -939,7 +950,10 @@ impl BasicParser {
                             EventType::Scalar { value, plain_implicit: true, style: ScalarStyle::Plain, .. }
                                 if value.is_empty()
                         ));
-                    if !last_was_implicit_empty {
+                    let same_line_as_value = self
+                        .last_value_token_line
+                        .map_or(false, |line| line == token.start_position.line);
+                    if !last_was_implicit_empty && !same_line_as_value {
                         if let Ok(Some(next_token)) = self.scanner.peek_token() {
                             if matches!(next_token.token_type, TokenType::Value) {
                                 self.events.push(Event::scalar(
@@ -1086,6 +1100,7 @@ impl BasicParser {
             }
 
             TokenType::Value => {
+                self.last_value_token_line = Some(token.start_position.line);
                 // YAML 1.2 §6.9.1: a `:` with no preceding key implies an
                 // empty key. Handle the four states where this can arise:
                 //   * ImplicitDocumentStart — open `+DOC`, `+MAP`, empty key.

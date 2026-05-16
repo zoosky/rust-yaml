@@ -392,6 +392,45 @@ prod: *base
         assert_eq!(parse_scalar_value(yaml), "a\nb\n");
     }
 
+    /// In `? key\n: anchored-value\n: next-value`, the second `: value`
+    /// is the value for the previous key — not a new mapping entry.
+    /// The "this scalar is a new key" heuristic must NOT fire when the
+    /// scalar shares a line with the most recent `:` token. See
+    /// yaml-test-suite case 6M2F.
+    #[test]
+    fn test_same_line_scalar_in_value_position_is_value_not_key() {
+        let yaml = "? &a a\n: &b b\n: *a\n";
+        let mut parser = BasicParser::new_eager(yaml.to_string());
+        let mut events = Vec::new();
+        while parser.check_event() {
+            if let Ok(Some(event)) = parser.get_event() {
+                events.push(event);
+            } else {
+                break;
+            }
+        }
+        let entries: Vec<String> = events
+            .iter()
+            .filter_map(|e| match &e.event_type {
+                EventType::Scalar { value, anchor, .. } => {
+                    Some(format!("V:{}:{}", anchor.as_deref().unwrap_or(""), value))
+                }
+                EventType::Alias { anchor } => Some(format!("A:{}", anchor)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            entries,
+            vec![
+                "V:a:a".to_string(),
+                "V:b:b".to_string(),
+                "V::".to_string(),
+                "A:a".to_string(),
+            ],
+            "expected key(a&a)/val(b&b)/empty-key/alias(*a); got {entries:?}"
+        );
+    }
+
     /// An anchor immediately before an implicit mapping key attaches to
     /// the key scalar, not to the surrounding mapping (§6.9.2). See
     /// yaml-test-suite case ZH7C.

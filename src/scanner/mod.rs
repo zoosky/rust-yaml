@@ -895,13 +895,18 @@ impl BasicScanner {
         // Q4CL: `"quoted2" trailing content`).
         {
             let mut offset = 0isize;
+            let mut saw_space = false;
             while matches!(self.peek_char(offset), Some(' ' | '\t')) {
+                saw_space = true;
                 offset += 1;
             }
             let next = self.peek_char(offset);
+            // A `#` is a comment indicator ONLY when preceded by whitespace
+            // (YAML 1.2 §6.6); `"value"#cmt` is invalid.
             let ok = match next {
                 None => true,
-                Some(c) => matches!(c, ',' | ':' | '}' | ']' | '#' | '\n' | '\r'),
+                Some('#') => saw_space,
+                Some(c) => matches!(c, ',' | ':' | '}' | ']' | '\n' | '\r'),
             };
             if !ok {
                 return Err(Error::scan(

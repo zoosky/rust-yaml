@@ -879,6 +879,20 @@ impl BasicParser {
             }
 
             TokenType::FlowMappingEnd => {
+                // Spec §7.5: implicit empty value for a flow-mapping
+                // entry that has only a key, e.g. `{ key }` or
+                // `{ key, a: b }` (yaml-test-suite 8KB6).
+                if innermost_mapping_has_odd_children(&self.events) {
+                    self.events.push(Event::scalar(
+                        token.start_position,
+                        None,
+                        None,
+                        String::new(),
+                        true,
+                        false,
+                        ScalarStyle::Plain,
+                    ));
+                }
                 self.events.push(Event::mapping_end(token.start_position));
 
                 // Restore the previous state from the stack if available
@@ -1256,6 +1270,26 @@ impl BasicParser {
                         token.start_position,
                         "Flow entry separator `,` with no preceding entry",
                     ));
+                }
+                // §7.5: inside a flow mapping, a comma terminates the
+                // current entry. If the entry had only a key (no `:`),
+                // synth an implicit empty value (yaml-test-suite 8KB6,
+                // 9BXH).
+                if matches!(
+                    self.state,
+                    ParserState::FlowMapping | ParserState::FlowMappingKey
+                ) && innermost_mapping_has_odd_children(&self.events)
+                {
+                    self.events.push(Event::scalar(
+                        token.start_position,
+                        None,
+                        None,
+                        String::new(),
+                        true,
+                        false,
+                        ScalarStyle::Plain,
+                    ));
+                    self.state = ParserState::FlowMapping;
                 }
             }
 

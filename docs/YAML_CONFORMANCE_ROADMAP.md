@@ -7,21 +7,21 @@ Live tracker for closing the gap between rust-yaml and the yaml/yaml-test-suite
 
 | Metric          | Value          |
 | --------------- | -------------- |
-| Tests passing   | **250 / 735** (34.0 %) |
+| Tests passing   | **314 / 735** (42.7 %) |
 | Parser hangs    | 0 ✅           |
-| Wrong-reject    | 29             |
-| Wrong-accept    | 148            |
-| Wrong-events    | 308            |
+| Wrong-reject    | 42             |
+| Wrong-accept    | 129            |
+| Wrong-events    | 250            |
 | Lib unit tests  | 163 passing    |
 
 Live results are written to `target/yaml-test-suite-failures.txt` after every
 `make test-yaml-suite` run. Categories: `Timeouts`, `Wrong reject`,
 `Wrong accept`, `Wrong events`.
 
-## Done this push
+## Done so far
 
-15 TDD-driven parser/scanner fixes, each with a regression test in
-`src/scanner/tests` or `src/parser/tests`:
+22 TDD-driven parser/scanner fixes, each with a regression test in
+`src/scanner/tests` or `src/parser/tests`. Session 1 commits (250/735 milestone):
 
 * `0768dcf` Stop `---word1` infinite loops (all 7 hangs gone).
 * `6b2ea6a` Ignore unknown directives (spec §6.8.4).
@@ -38,6 +38,17 @@ Live results are written to `target/yaml-test-suite-failures.txt` after every
 * `a10aaeb` Reject a second tag on the same node.
 * `935d7e1` Error on content after `...` document-end marker.
 * `798dd02` Reject aliases pointing at undefined anchors.
+
+Session 2 commits (250 → 314 = +64):
+
+* `f1e9050` Quoted-scalar line folding §7.3.2 (+29; biggest single win).
+* `d74791a` Single-quote `''` escape + `\<NL>` whitespace strip (+10).
+* `660b445` `:` adjacent to value in flow context (+6).
+* `9c0398f` Reject `---` / `...` inside flow collections (+2).
+* `6e71fcf` Reject trailing content after quoted scalar (+4).
+* `cfa7f69` Surface eager-parse errors + reject duplicate %YAML (+2).
+* `38d3f19` Reject anchor / tag on alias node (+4).
+* `fce1927` Reject directives outside the directive context (+7).
 
 ## Blocked clusters (need deeper refactors)
 

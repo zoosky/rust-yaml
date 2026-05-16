@@ -331,6 +331,20 @@ impl BasicParser {
             }
 
             TokenType::StreamEnd => {
+                // YAML 1.2 §6.8: a directive must be followed by a
+                // document body. If we reach end-of-stream with pending
+                // `%YAML` / `%TAG` directives and no document was ever
+                // opened, that's a parse error (yaml-test-suite 9MMA, B63P).
+                if matches!(
+                    self.state,
+                    ParserState::ImplicitDocumentStart | ParserState::StreamStart
+                ) && (self.yaml_version.is_some() || !self.tag_directives.is_empty())
+                {
+                    return Err(Error::parse(
+                        token.start_position,
+                        "Directive without a document body",
+                    ));
+                }
                 // Close any open document. A document is "open" in every
                 // state except: not-yet-started (StreamStart /
                 // ImplicitDocumentStart), or already closed (DocumentEnd /

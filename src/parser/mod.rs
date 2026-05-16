@@ -404,8 +404,26 @@ impl BasicParser {
             }
 
             TokenType::DocumentStart => {
-                // Close previous document if needed
+                // If the most-recent event is still `DocumentStart`, the
+                // previous document had no body — emit an implicit empty
+                // scalar and close it before opening a new one (yaml-test-
+                // suite 6XDY).
                 if matches!(
+                    self.events.last().map(|e| &e.event_type),
+                    Some(EventType::DocumentStart { .. })
+                ) {
+                    self.events.push(Event::scalar(
+                        token.start_position,
+                        None,
+                        None,
+                        String::new(),
+                        true,
+                        false,
+                        ScalarStyle::Plain,
+                    ));
+                    self.events
+                        .push(Event::document_end(token.start_position, true));
+                } else if matches!(
                     self.state,
                     ParserState::DocumentContent | ParserState::BlockNode
                 ) {

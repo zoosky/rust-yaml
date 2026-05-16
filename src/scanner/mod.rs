@@ -603,6 +603,7 @@ impl BasicScanner {
         let start_pos = self.position;
         let start_col = start_pos.column;
         let mut value = String::new();
+        let mut multi_line = false;
 
         loop {
             // Scan content on the current line until we hit a stop condition.
@@ -711,6 +712,24 @@ impl BasicScanner {
                 for _ in 0..(newlines - 1) {
                     value.push('\n');
                 }
+            }
+            multi_line = true;
+        }
+
+        // YAML 1.2 §8.1.3: implicit keys must be on a single line. If the
+        // plain scalar folded across line breaks AND the next non-
+        // whitespace char is `:` (key-value separator), it's about to be
+        // used as an implicit key — reject (yaml-test-suite G7JE).
+        if multi_line && self.flow_level == 0 {
+            let mut off = 0isize;
+            while matches!(self.peek_char(off), Some(' ' | '\t')) {
+                off += 1;
+            }
+            if self.peek_char(off) == Some(':') {
+                return Err(Error::scan(
+                    self.position,
+                    "Multi-line plain scalar may not be used as an implicit key".to_string(),
+                ));
             }
         }
 

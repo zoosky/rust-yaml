@@ -71,6 +71,39 @@ fn has_unclosed_flow_collection(events: &[Event]) -> bool {
     depth > 0
 }
 
+/// Walk `events` to detect a document that already contains a closed
+/// root-level node. Returns true when the second root node arrives and
+/// the existing event stack has no unmatched MapStart/SeqStart.
+fn second_root_node_present(events: &[Event]) -> bool {
+    let mut after_doc_start = false;
+    let mut has_root_node = false;
+    let mut depth = 0i32;
+    for e in events.iter() {
+        match &e.event_type {
+            EventType::DocumentStart { .. } => {
+                after_doc_start = true;
+                has_root_node = false;
+                depth = 0;
+            }
+            EventType::DocumentEnd { .. } => after_doc_start = false,
+            EventType::MappingStart { .. } | EventType::SequenceStart { .. } => depth += 1,
+            EventType::MappingEnd | EventType::SequenceEnd => {
+                depth -= 1;
+                if depth == 0 {
+                    has_root_node = true;
+                }
+            }
+            EventType::Scalar { .. } | EventType::Alias { .. } => {
+                if depth == 0 {
+                    has_root_node = true;
+                }
+            }
+            _ => {}
+        }
+    }
+    after_doc_start && has_root_node && depth == 0
+}
+
 /// Return true when the innermost still-open mapping has an odd number
 /// of children — i.e. a key has been emitted but its value has not.
 /// Used to decide when to synthesise an implicit empty scalar.
@@ -641,6 +674,16 @@ impl BasicParser {
             }
 
             TokenType::BlockSequenceStart => {
+                // §3.2.1.1: reject a second root-level node
+                // (yaml-test-suite BD7L: `- a\n- b\ninvalid: x`).
+                if matches!(self.state, ParserState::DocumentContent)
+                    && second_root_node_present(&self.events)
+                {
+                    return Err(Error::parse(
+                        token.start_position,
+                        "Document already contains a root node",
+                    ));
+                }
                 if matches!(self.state, ParserState::ImplicitDocumentStart) {
                     let event = self.create_implicit_document_start(token.start_position);
                     self.events.push(event);
@@ -664,6 +707,16 @@ impl BasicParser {
             }
 
             TokenType::BlockMappingStart => {
+                // §3.2.1.1: reject a second root-level node
+                // (yaml-test-suite BD7L variants).
+                if matches!(self.state, ParserState::DocumentContent)
+                    && second_root_node_present(&self.events)
+                {
+                    return Err(Error::parse(
+                        token.start_position,
+                        "Document already contains a root node",
+                    ));
+                }
                 // Determine whether to create a new mapping or continue existing one
                 // This token is generated when we encounter a key at the start of a line with nested content
                 // It doesn't always mean we need to create a new mapping - sometimes we're just continuing
@@ -1032,51 +1085,14 @@ impl BasicParser {
                     self.state = ParserState::DocumentContent;
                 }
 
-                // §3.2.1.1: a document has exactly one root node. A
-                // second top-level scalar in the same document (no
-                // intervening `---` / `...`) is invalid — e.g. \`word1
-                // # cmt\nword2\` after the comment breaks the first
-                // scalar (yaml-test-suite BS4K, BF9H, 8XDJ).
-                //
-                // Only error if NO collection is still open since the
-                // most recent DocumentStart. If we're mid-mapping or
-                // mid-sequence the new scalar is just a child node.
-                if matches!(self.state, ParserState::DocumentContent) {
-                    let mut after_doc_start = false;
-                    let mut has_root_node = false;
-                    let mut depth = 0i32;
-                    for e in self.events.iter() {
-                        match &e.event_type {
-                            EventType::DocumentStart { .. } => {
-                                after_doc_start = true;
-                                has_root_node = false;
-                                depth = 0;
-                            }
-                            EventType::DocumentEnd { .. } => {
-                                after_doc_start = false;
-                            }
-                            EventType::MappingStart { .. }
-                            | EventType::SequenceStart { .. } => depth += 1,
-                            EventType::MappingEnd | EventType::SequenceEnd => {
-                                depth -= 1;
-                                if depth == 0 {
-                                    has_root_node = true;
-                                }
-                            }
-                            EventType::Scalar { .. } | EventType::Alias { .. } => {
-                                if depth == 0 {
-                                    has_root_node = true;
-                                }
-                            }
-                            _ => {}
-                        }
-                    }
-                    if after_doc_start && has_root_node && depth == 0 {
-                        return Err(Error::parse(
-                            token.start_position,
-                            "Document already contains a root node",
-                        ));
-                    }
+                // §3.2.1.1: a document has exactly one root node.
+                if matches!(self.state, ParserState::DocumentContent)
+                    && second_root_node_present(&self.events)
+                {
+                    return Err(Error::parse(
+                        token.start_position,
+                        "Document already contains a root node",
+                    ));
                 }
 
                 // Check if we're in a sequence and the next token is Value (indicating a mapping key)

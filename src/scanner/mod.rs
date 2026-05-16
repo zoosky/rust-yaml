@@ -1276,13 +1276,22 @@ impl BasicScanner {
                     self.tokens.push(token);
                 }
 
-                // Document markers (only if not a block entry)
+                // Document markers (only if not a block entry).
+                //
+                // Reached only when `-` is at column = current_indent + 1 AND
+                // the next character is non-whitespace — i.e. either the
+                // `---` document-start marker OR a plain scalar starting
+                // with `-` (e.g. `---word1`, `-foo`). If `scan_document_start`
+                // declines, we MUST consume the run as a plain scalar — not
+                // consulting `is_plain_scalar_start` here, because that helper
+                // unconditionally rejects `-`, which would leave the outer
+                // `while let` loop spinning on the same character.
                 '-' if self.position.column == self.current_indent + 1
                     && !self.peek_char(1).map_or(true, |c| c.is_whitespace()) =>
                 {
                     if let Some(token) = self.scan_document_start()? {
                         self.tokens.push(token);
-                    } else if self.is_plain_scalar_start() {
+                    } else {
                         let token = self.scan_plain_scalar()?;
                         self.tokens.push(token);
                     }
@@ -2090,6 +2099,90 @@ impl Scanner for BasicScanner {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Drive the parser pipeline on `input` in a dedicated thread, returning
+    /// `None` if it doesn't finish within `Duration::from_secs(2)`. Used by
+    /// regression tests for parser hangs so a still-broken parser doesn't
+    /// block the whole `cargo test` run.
+    fn parse_with_timeout(input: &str) -> Option<Vec<crate::parser::Event>> {
+        use crate::parser::{BasicParser, Parser as ParserTrait};
+        use std::sync::mpsc;
+        use std::thread;
+        use std::time::Duration;
+
+        let owned = input.to_string();
+        let (tx, rx) = mpsc::channel();
+        thread::spawn(move || {
+            let mut p = BasicParser::new_eager(owned);
+            let _ = p.take_scanning_error();
+            let mut events = Vec::new();
+            loop {
+                match p.get_event() {
+                    Ok(Some(ev)) => events.push(ev),
+                    Ok(None) => break,
+                    Err(_) => break,
+                }
+            }
+            let _ = tx.send(events);
+        });
+        rx.recv_timeout(Duration::from_secs(2)).ok()
+    }
+
+    /// Regression: `---` directly followed by non-space text used to spin the
+    /// scanner forever because the `-` match arm at line-start dispatched to
+    /// `scan_document_start` (which correctly returned None) and then to
+    /// `is_plain_scalar_start` (which returns false for `-`, so no consumption
+    /// occurred — outer `while let` re-entered with the same char). Fix:
+    /// fall through to `scan_plain_scalar` unconditionally when not a doc
+    /// marker — the guard already ensures the char is non-whitespace.
+    /// See yaml-test-suite tests 82AN / EXG3.
+    #[test]
+    fn three_dashes_directly_followed_by_text_does_not_hang() {
+        let events = parse_with_timeout("---word1\nword2\n")
+            .expect("parser hung — `---word1` should not produce an infinite loop");
+        // We must produce at least one scalar whose value starts with `---`,
+        // proving that the dashes were consumed as part of a plain scalar
+        // (not interpreted as a document marker, which would consume them
+        // separately).
+        let starts_with_dashes = events.iter().any(|e| {
+            matches!(&e.event_type,
+                crate::parser::EventType::Scalar { value, .. } if value.starts_with("---")
+            )
+        });
+        assert!(
+            starts_with_dashes,
+            "expected a plain scalar starting with `---`, got events: {events:?}"
+        );
+    }
+
+    /// Spec requires the two physical lines of `---word1\nword2` to fold into
+    /// a single plain scalar `"---word1 word2"`. Multi-line plain-scalar
+    /// folding is a separate bug — this test is ignored until that fix lands.
+    /// Tracked by yaml-test-suite test 82AN.
+    #[test]
+    #[ignore = "multi-line plain-scalar folding not yet implemented (yaml-test-suite 82AN)"]
+    fn three_dashes_followed_by_text_folds_continuation_line() {
+        let events = parse_with_timeout("---word1\nword2\n")
+            .expect("parser hung");
+        let scalars: Vec<&str> = events
+            .iter()
+            .filter_map(|e| match &e.event_type {
+                crate::parser::EventType::Scalar { value, .. } => Some(value.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(scalars, vec!["---word1 word2"]);
+    }
+
+    /// Regression: tab between block-entry marker and a `-N` value used to
+    /// hang the scanner via the same `-` match arm. See yaml-test-suite
+    /// Y79Y/010.
+    #[test]
+    fn dash_tab_negative_number_does_not_hang() {
+        let events = parse_with_timeout("-\t-1\n")
+            .expect("parser hung — `-\\t-1` should not produce an infinite loop");
+        assert!(!events.is_empty(), "expected event stream, got none");
+    }
 
     #[test]
     fn test_basic_tokenization() {

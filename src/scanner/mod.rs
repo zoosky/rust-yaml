@@ -741,6 +741,7 @@ impl BasicScanner {
 
         self.advance(); // Skip opening quote
         let mut closed = false;
+        let mut multi_line = false;
 
         while let Some(ch) = self.current_char {
             if ch == quote_char {
@@ -851,6 +852,7 @@ impl BasicScanner {
                     match c {
                         '\n' => {
                             newlines += 1;
+                            multi_line = true;
                             self.advance();
                         }
                         '\r' => {
@@ -925,6 +927,16 @@ impl BasicScanner {
                 return Err(Error::scan(
                     self.position,
                     format!("Unexpected `{}` after quoted scalar", next.unwrap_or(' ')),
+                ));
+            }
+            // YAML 1.2 §8.1.3: implicit keys must be on a single line.
+            // If the scalar folded across line breaks AND the next non-
+            // whitespace char is `:` (key-value separator), the scalar
+            // is being used as an implicit key — error.
+            if multi_line && self.flow_level == 0 && next == Some(':') {
+                return Err(Error::scan(
+                    self.position,
+                    "Multi-line quoted scalar may not be used as an implicit key".to_string(),
                 ));
             }
         }

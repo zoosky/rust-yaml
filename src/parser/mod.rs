@@ -199,6 +199,25 @@ impl BasicParser {
         Ok(())
     }
 
+    /// YAML 1.2 §6.8: directives may appear only before the first
+    /// document (`StreamStart` / `ImplicitDocumentStart`) or after an
+    /// explicit `...` (`DocumentEnd`). Anywhere else they're invalid.
+    fn check_directive_context(&self, pos: Position, name: &str) -> Result<()> {
+        if matches!(
+            self.state,
+            ParserState::StreamStart
+                | ParserState::ImplicitDocumentStart
+                | ParserState::DocumentEnd
+        ) {
+            Ok(())
+        } else {
+            Err(Error::parse(
+                pos,
+                format!("{name} directive is only allowed before a document or after `...`"),
+            ))
+        }
+    }
+
     /// Create implicit document start event with directives
     fn create_implicit_document_start(&mut self, position: Position) -> Event {
         let event = Event::document_start(
@@ -331,9 +350,10 @@ impl BasicParser {
             }
 
             TokenType::YamlDirective(major, minor) => {
-                // YAML 1.2 §6.8.1: a document may have at most one `%YAML`
-                // directive. Duplicate directives are invalid
-                // (yaml-test-suite SF5V).
+                // YAML 1.2 §6.8: directives may appear only before the
+                // first document or after an explicit `...` document end.
+                self.check_directive_context(token.start_position, "%YAML")?;
+                // §6.8.1: a document may have at most one `%YAML` directive.
                 if self.yaml_version.is_some() {
                     return Err(Error::parse(
                         token.start_position,
@@ -344,11 +364,10 @@ impl BasicParser {
             }
 
             TokenType::TagDirective(handle, prefix) => {
-                // Store tag directive and update tag resolver
+                self.check_directive_context(token.start_position, "%TAG")?;
                 self.tag_directives.push((handle.clone(), prefix.clone()));
                 self.tag_resolver
                     .add_directive(handle.clone(), prefix.clone());
-                // Stay in stream state waiting for document
             }
 
             TokenType::DocumentStart => {

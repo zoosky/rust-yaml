@@ -1202,7 +1202,20 @@ impl BasicParser {
             }
 
             TokenType::FlowEntry => {
-                // Flow collection separator, no specific event needed
+                // YAML 1.2 §7.4: a `,` must follow an entry. Leading
+                // `,` (e.g. `[ , a, b ]`) and double `,, ` are invalid
+                // (yaml-test-suite 9MAG).
+                let no_prior_entry = matches!(
+                    self.events.last().map(|e| &e.event_type),
+                    Some(EventType::SequenceStart { flow_style: true, .. })
+                        | Some(EventType::MappingStart { flow_style: true, .. })
+                );
+                if no_prior_entry {
+                    return Err(Error::parse(
+                        token.start_position,
+                        "Flow entry separator `,` with no preceding entry",
+                    ));
+                }
             }
 
             TokenType::Anchor(name) => {

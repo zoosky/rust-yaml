@@ -1944,15 +1944,34 @@ impl BasicScanner {
                     return false;
                 }
                 Some(c) => {
-                    // For a token to be a pure number, it must be
-                    // terminated by an actual end-of-token marker:
-                    // whitespace, newline, EOF, or a flow indicator
-                    // when we're in flow context. `:` is special — it
-                    // ends a number ONLY when followed by whitespace
-                    // (otherwise the scalar might be `20:03:20`,
-                    // yaml-test-suite U9NS).
-                    if c.is_whitespace() || (self.flow_level > 0 && ",[]{}".contains(c)) {
+                    // For a token to be a pure number, what follows
+                    // the digits must be end-of-token. In flow
+                    // context that's a flow indicator. In block
+                    // context the rest of the line must be pure
+                    // whitespace (possibly trailing a comment) — if
+                    // there's more non-whitespace content on this
+                    // line, the digits are part of a larger plain
+                    // scalar like \`1 - 3\` (yaml-test-suite P76L)
+                    // or \`20:03:20\` (yaml-test-suite U9NS).
+                    if self.flow_level > 0 && ",[]{}".contains(c) {
                         return has_digit;
+                    }
+                    if c == '\n' || c == '\r' {
+                        return has_digit;
+                    }
+                    if c == ' ' || c == '\t' {
+                        // Look ahead: rest of line must be whitespace
+                        // or a comment.
+                        let mut probe = offset + 1;
+                        loop {
+                            match self.peek_char(probe) {
+                                None => return has_digit,
+                                Some('\n') | Some('\r') => return has_digit,
+                                Some('#') => return has_digit,
+                                Some(' ') | Some('\t') => probe += 1,
+                                Some(_) => return false,
+                            }
+                        }
                     }
                     if c == ':' {
                         let next = self.peek_char(offset + 1);

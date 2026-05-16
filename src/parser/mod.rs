@@ -51,6 +51,35 @@ fn has_open_document(events: &[Event]) -> bool {
 /// `BlockEnd` token path. Also synthesises implicit empty scalars for
 /// mappings that have an odd child-event count (i.e. a key without a
 /// value before the close).
+/// Return true when the innermost still-open mapping has an odd number
+/// of children — i.e. a key has been emitted but its value has not.
+/// Used to decide when to synthesise an implicit empty scalar.
+fn innermost_mapping_has_odd_children(events: &[Event]) -> bool {
+    let mut stack: Vec<(&'static str, usize)> = Vec::new();
+    for ev in events.iter() {
+        match &ev.event_type {
+            EventType::DocumentStart { .. } | EventType::DocumentEnd { .. } => {
+                stack.clear();
+            }
+            EventType::MappingStart { .. } => stack.push(("map", 0)),
+            EventType::SequenceStart { .. } => stack.push(("seq", 0)),
+            EventType::MappingEnd | EventType::SequenceEnd => {
+                stack.pop();
+                if let Some(parent) = stack.last_mut() {
+                    parent.1 += 1;
+                }
+            }
+            EventType::Scalar { .. } | EventType::Alias { .. } => {
+                if let Some(parent) = stack.last_mut() {
+                    parent.1 += 1;
+                }
+            }
+            _ => {}
+        }
+    }
+    matches!(stack.last(), Some(("map", n)) if n % 2 == 1)
+}
+
 fn close_open_collections(events: &mut Vec<Event>, pos: Position) {
     // Each entry: (kind, children_at_this_depth) where `kind` is "map"
     // or "seq". `children` counts top-level node events emitted inside
@@ -891,6 +920,25 @@ impl BasicParser {
                     }
                 }
 
+                // YAML 1.2 §6.9.1: if we're back at a key position but the
+                // previous key still owes a value (odd children in the
+                // active mapping), synthesise the implicit empty scalar
+                // now — this scalar then becomes the next key
+                // (yaml-test-suite 7W2P: `? a\n? b\nc:`).
+                if matches!(self.state, ParserState::BlockMappingKey)
+                    && innermost_mapping_has_odd_children(&self.events)
+                {
+                    self.events.push(Event::scalar(
+                        token.start_position,
+                        None,
+                        None,
+                        String::new(),
+                        true,
+                        false,
+                        ScalarStyle::Plain,
+                    ));
+                }
+
                 // Convert QuoteStyle to ScalarStyle
                 let style = match quote_style {
                     crate::scanner::QuoteStyle::Plain => ScalarStyle::Plain,
@@ -1178,9 +1226,21 @@ impl BasicParser {
                         };
                     }
                     ParserState::BlockMappingKey | ParserState::FlowMappingKey => {
-                        // Already in a mapping and expecting a key, this is another complex key
-                        // Don't start a new mapping, just continue with the current state
-                        // The state is already correct for expecting a key
+                        // A new `?` while we still owe a value for the
+                        // previous key — synthesise an implicit empty
+                        // scalar so the mapping stays balanced
+                        // (yaml-test-suite 7W2P).
+                        if innermost_mapping_has_odd_children(&self.events) {
+                            self.events.push(Event::scalar(
+                                token.start_position,
+                                None,
+                                None,
+                                String::new(),
+                                true,
+                                false,
+                                ScalarStyle::Plain,
+                            ));
+                        }
                     }
                     _ => {
                         let context =

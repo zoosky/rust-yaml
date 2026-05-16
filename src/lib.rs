@@ -381,6 +381,31 @@ prod: *base
         assert_eq!(parse_scalar_value(yaml), "a\nb\n");
     }
 
+    /// Two `? key` markers in a row mean the first key has no value.
+    /// The parser must synthesise an implicit empty scalar between them
+    /// so the mapping has an even number of children. See yaml-test-suite
+    /// case 7W2P.
+    #[test]
+    fn test_consecutive_complex_keys_emit_empty_values() {
+        let yaml = "? a\n? b\n";
+        let mut parser = BasicParser::new_eager(yaml.to_string());
+        let mut scalars = Vec::new();
+        while parser.check_event() {
+            if let Ok(Some(event)) = parser.get_event() {
+                if let EventType::Scalar { value, .. } = event.event_type {
+                    scalars.push(value);
+                }
+            } else {
+                break;
+            }
+        }
+        assert_eq!(
+            scalars,
+            vec!["a".to_string(), String::new(), "b".to_string(), String::new()],
+            "Expected key/empty/key/empty pattern; got {scalars:?}"
+        );
+    }
+
     /// Plain scalars may legally contain a `:` that is *not* followed by
     /// whitespace (§7.3.3). The scanner must scan past such colons and
     /// only treat a `: ` (colon + whitespace) as a key/value separator.

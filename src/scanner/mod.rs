@@ -1037,6 +1037,34 @@ impl BasicScanner {
                 ));
             };
 
+            // YAML 1.2 §6.8.1: the directive line must end after the
+            // version (modulo whitespace and an optional comment). Extra
+            // tokens (e.g. `%YAML 1.2 foo`) are invalid — yaml-test-suite
+            // H7TQ. Also `%YAML 1.1#...` (yaml-test-suite MUS6/00) needs
+            // whitespace before `#`.
+            let mut saw_space = false;
+            while matches!(self.current_char, Some(' ' | '\t')) {
+                saw_space = true;
+                self.advance();
+            }
+            match self.current_char {
+                None | Some('\n' | '\r') => {}
+                Some('#') if saw_space => {
+                    while let Some(ch) = self.current_char {
+                        if ch == '\n' || ch == '\r' {
+                            break;
+                        }
+                        self.advance();
+                    }
+                }
+                Some(c) => {
+                    return Err(Error::scan(
+                        self.position,
+                        format!("Unexpected `{c}` after %YAML directive"),
+                    ));
+                }
+            }
+
             Ok(Some(Token::new(
                 TokenType::YamlDirective(major, minor),
                 start_pos,

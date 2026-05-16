@@ -601,49 +601,118 @@ impl BasicScanner {
     /// Scan a plain scalar (unquoted string)
     fn scan_plain_scalar(&mut self) -> Result<Token> {
         let start_pos = self.position;
+        let start_col = start_pos.column;
         let mut value = String::new();
 
-        while let Some(ch) = self.current_char {
-            // Stop at structural characters in block context
-            if self.flow_level == 0 {
-                match ch {
-                    '\n' | '\r' => break,
-                    ':' if self.peek_char(1).map_or(true, |c| c.is_whitespace()) => break,
-                    '#' if value.is_empty()
-                        || self.peek_char(-1).map_or(false, |c| c.is_whitespace()) =>
-                    {
-                        break;
+        loop {
+            // Scan content on the current line until we hit a stop condition.
+            while let Some(ch) = self.current_char {
+                if self.flow_level == 0 {
+                    match ch {
+                        '\n' | '\r' => break,
+                        ':' if self.peek_char(1).map_or(true, |c| c.is_whitespace()) => break,
+                        '#' if value.is_empty()
+                            || self.peek_char(-1).map_or(false, |c| c.is_whitespace()) =>
+                        {
+                            break;
+                        }
+                        _ => {}
                     }
-                    _ => {}
+                } else {
+                    match ch {
+                        ',' | '[' | ']' | '{' | '}' => break,
+                        ':' if self
+                            .peek_char(1)
+                            .map_or(true, |c| c.is_whitespace() || "]}".contains(c)) =>
+                        {
+                            break;
+                        }
+                        '#' if value.is_empty()
+                            || self.peek_char(-1).map_or(false, |c| c.is_whitespace()) =>
+                        {
+                            break;
+                        }
+                        _ => {}
+                    }
                 }
-            } else {
-                // In flow context, stop at flow indicators
-                match ch {
-                    ',' | '[' | ']' | '{' | '}' => break,
-                    ':' if self
-                        .peek_char(1)
-                        .map_or(true, |c| c.is_whitespace() || "]}".contains(c)) =>
-                    {
-                        break;
+                value.push(ch);
+                self.advance();
+            }
+
+            // If we didn't stop at a newline, this scalar is complete.
+            if !matches!(self.current_char, Some('\n' | '\r')) {
+                break;
+            }
+
+            // YAML 1.2 §6.5 / §7.3.3: try to fold continuation lines into
+            // the same plain scalar. A continuation line must be:
+            //   * indented strictly more than the scalar's start column,
+            //   * not a document marker (`---` / `...`),
+            //   * not a comment-only line,
+            //   * not empty-with-EOF.
+            // Save state for backtracking if continuation isn't allowed.
+            let saved_position = self.position;
+            let saved_index = self.current_char_index;
+            let saved_char = self.current_char;
+
+            // Count physical newlines we skip; whitespace within the lines
+            // is also consumed.
+            let mut newlines = 0usize;
+            loop {
+                match self.current_char {
+                    Some('\n') => {
+                        newlines += 1;
+                        self.advance();
                     }
-                    '#' if value.is_empty()
-                        || self.peek_char(-1).map_or(false, |c| c.is_whitespace()) =>
-                    {
-                        break;
+                    Some('\r') => {
+                        self.advance();
                     }
-                    _ => {}
+                    Some(' ' | '\t') => {
+                        self.advance();
+                    }
+                    _ => break,
                 }
             }
 
-            value.push(ch);
-            self.advance();
+            let next_col = self.position.column;
+            let next_ch = self.current_char;
+            let is_doc_marker = matches!(next_ch, Some('-') | Some('.'))
+                && self.peek_char(1) == next_ch
+                && self.peek_char(2) == next_ch
+                && self.peek_char(3).map_or(true, |c| c.is_whitespace());
+
+            // Continuation column must be >= the scalar's start column.
+            // `>=` (not `>`) is correct for plain scalars at line head:
+            // `---word1\nword2` (both at col 1) is a single folded scalar.
+            // For scalars indented as a mapping value (e.g. `k: v1\n  v2`),
+            // start_col will be the value's column and the check still
+            // requires the continuation to be at least that deep.
+            let can_continue = next_ch.is_some()
+                && !matches!(next_ch, Some('\n' | '\r' | '#'))
+                && next_col >= start_col
+                && !is_doc_marker;
+
+            if !can_continue {
+                self.position = saved_position;
+                self.current_char_index = saved_index;
+                self.current_char = saved_char;
+                break;
+            }
+
+            // Append fold separator: single newline → space; N>1 newlines
+            // collapse to N-1 retained newlines (YAML §6.5 line folding).
+            if newlines <= 1 {
+                value.push(' ');
+            } else {
+                for _ in 0..(newlines - 1) {
+                    value.push('\n');
+                }
+            }
         }
 
-        // Check string length limit
         self.resource_tracker
             .check_string_length(&self.limits, value.len())?;
 
-        // Trim trailing whitespace from plain scalars
         let value = value.trim_end().to_string();
         let normalized_value = Self::normalize_scalar(value);
 
@@ -2350,11 +2419,8 @@ mod tests {
     }
 
     /// Spec requires the two physical lines of `---word1\nword2` to fold into
-    /// a single plain scalar `"---word1 word2"`. Multi-line plain-scalar
-    /// folding is a separate bug — this test is ignored until that fix lands.
-    /// Tracked by yaml-test-suite test 82AN.
+    /// a single plain scalar `"---word1 word2"`. Tracked by yaml-test-suite 82AN.
     #[test]
-    #[ignore = "multi-line plain-scalar folding not yet implemented (yaml-test-suite 82AN)"]
     fn three_dashes_followed_by_text_folds_continuation_line() {
         let events = parse_with_timeout("---word1\nword2\n")
             .expect("parser hung");

@@ -62,6 +62,7 @@ Session 3 commits (314 → 341 = +27):
 * `bfc33b2` Implicit empty scalar for empty `---` document (+6).
 * `5f0096d` Implicit empty scalar between back-to-back `---` (+2).
 * `59fa0b0` Implicit empty scalar for `---\n...` empty document (+2).
+* `0dbee5e` Relax over-strict double-tag check (net 0; wrong-reject -4).
 
 ## Blocked clusters (need deeper refactors)
 

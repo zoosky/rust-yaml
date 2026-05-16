@@ -135,12 +135,13 @@ impl BasicParser {
             defined_anchors: std::collections::HashSet::new(),
         };
 
-        // If there was a scanning error, store it for later propagation
+        // If there was a scanning error, store it for later propagation.
+        // Likewise, surface eager-parse errors via the same field so
+        // `take_scanning_error` reports them.
         if let Some(error) = scanning_error {
             parser.scanning_error = Some(error);
-        } else {
-            // Parse all events immediately only if there were no scanning errors
-            parser.parse_all().unwrap_or(());
+        } else if let Err(error) = parser.parse_all() {
+            parser.scanning_error = Some(error);
         }
 
         parser
@@ -330,9 +331,16 @@ impl BasicParser {
             }
 
             TokenType::YamlDirective(major, minor) => {
-                // Store YAML version directive
+                // YAML 1.2 §6.8.1: a document may have at most one `%YAML`
+                // directive. Duplicate directives are invalid
+                // (yaml-test-suite SF5V).
+                if self.yaml_version.is_some() {
+                    return Err(Error::parse(
+                        token.start_position,
+                        "Multiple %YAML directives in the same document",
+                    ));
+                }
                 self.yaml_version = Some((*major, *minor));
-                // Stay in stream state waiting for document
             }
 
             TokenType::TagDirective(handle, prefix) => {

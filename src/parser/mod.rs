@@ -345,6 +345,25 @@ impl BasicParser {
                         "Directive without a document body",
                     ));
                 }
+                // YAML 1.2: an explicit `---` with NO body needs an
+                // implicit empty scalar as the doc's content (yaml-test-
+                // suite MUS6/02). We detect that case by checking the
+                // last emitted event — if it's still `DocumentStart`,
+                // nothing has been pushed to the body yet.
+                if matches!(
+                    self.events.last().map(|e| &e.event_type),
+                    Some(EventType::DocumentStart { .. })
+                ) {
+                    self.events.push(Event::scalar(
+                        token.start_position,
+                        None,
+                        None,
+                        String::new(),
+                        true,
+                        false,
+                        ScalarStyle::Plain,
+                    ));
+                }
                 // Close any open document. A document is "open" in every
                 // state except: not-yet-started (StreamStart /
                 // ImplicitDocumentStart), or already closed (DocumentEnd /

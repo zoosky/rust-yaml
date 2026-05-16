@@ -381,6 +381,41 @@ prod: *base
         assert_eq!(parse_scalar_value(yaml), "a\nb\n");
     }
 
+    /// An anchor immediately before an implicit mapping key attaches to
+    /// the key scalar, not to the surrounding mapping (§6.9.2). See
+    /// yaml-test-suite case ZH7C.
+    #[test]
+    fn test_anchor_before_implicit_key_attaches_to_key() {
+        let yaml = "&a a: b\n";
+        let mut parser = BasicParser::new_eager(yaml.to_string());
+        let mut events = Vec::new();
+        while parser.check_event() {
+            if let Ok(Some(event)) = parser.get_event() {
+                events.push(event);
+            } else {
+                break;
+            }
+        }
+        let mapping_anchor = events.iter().find_map(|e| match &e.event_type {
+            EventType::MappingStart { anchor, .. } => Some(anchor.clone()),
+            _ => None,
+        });
+        assert_eq!(
+            mapping_anchor,
+            Some(None),
+            "MappingStart should have no anchor; got {mapping_anchor:?}"
+        );
+        let first_scalar = events.iter().find_map(|e| match &e.event_type {
+            EventType::Scalar { value, anchor, .. } => Some((value.clone(), anchor.clone())),
+            _ => None,
+        });
+        assert_eq!(
+            first_scalar,
+            Some(("a".to_string(), Some("a".to_string()))),
+            "Anchor should be on the key scalar; got {first_scalar:?}"
+        );
+    }
+
     /// A line beginning with `:` denotes a mapping entry with an implicit
     /// empty key. The parser must open a block mapping (if not already in
     /// one) and synthesise the empty key. yaml-test-suite case 2JQS.

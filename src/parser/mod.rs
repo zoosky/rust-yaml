@@ -683,10 +683,34 @@ impl BasicParser {
                         self.state_stack.push(self.state);
                     }
 
+                    // If the BlockMappingStart wraps an implicit key
+                    // at the document root and the next token is the
+                    // key scalar, any pending anchor/tag belongs to
+                    // that key — not to the surrounding mapping
+                    // (yaml-test-suite ZH7C, E76Z, 74H7). For mappings
+                    // nested in a value or sequence position the
+                    // anchor was placed in the value slot and DOES
+                    // attach to the mapping itself.
+                    let in_value_position = matches!(
+                        self.state,
+                        ParserState::BlockMappingValue | ParserState::BlockSequence
+                    );
+                    let next_is_scalar = matches!(
+                        self.scanner.peek_token(),
+                        Ok(Some(t)) if matches!(
+                            t.token_type,
+                            TokenType::Scalar(..) | TokenType::Anchor(_) | TokenType::Tag(_)
+                        )
+                    );
+                    let (anchor, tag) = if !in_value_position && next_is_scalar {
+                        (None, None)
+                    } else {
+                        (self.pending_anchor.take(), self.pending_tag.take())
+                    };
                     self.events.push(Event::mapping_start(
                         token.start_position,
-                        self.pending_anchor.take(),
-                        self.pending_tag.take(),
+                        anchor,
+                        tag,
                         false,
                     ));
                     self.state = ParserState::BlockMappingKey;

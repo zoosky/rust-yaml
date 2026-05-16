@@ -1104,6 +1104,24 @@ impl BasicScanner {
             self.advance(); // .
             self.advance(); // .
 
+            // YAML 1.2 §6.4: `...` must be followed only by whitespace or
+            // end-of-line (comments allowed). Inline content after `...`
+            // is invalid (yaml-test-suite 3HFZ).
+            while let Some(ch) = self.current_char {
+                match ch {
+                    ' ' | '\t' => {
+                        self.advance();
+                    }
+                    '\n' | '\r' | '#' => break,
+                    _ => {
+                        return Err(Error::scan(
+                            self.position,
+                            "Content after `...` document-end marker is invalid".to_string(),
+                        ));
+                    }
+                }
+            }
+
             Ok(Some(Token::new(
                 TokenType::DocumentEnd,
                 start_pos,

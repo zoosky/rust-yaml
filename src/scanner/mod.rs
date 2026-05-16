@@ -2245,11 +2245,11 @@ impl BasicScanner {
     ///
     /// Per spec §8.1.1.1, indent is the leading-space count of the first
     /// non-empty content line (or the longest blank-line indent if no
-    /// non-empty line exists). Auto-detected content can legitimately
-    /// sit at any positive column, including below the column of the
-    /// indicator itself when the indicator is inline with a sequence
-    /// dash (yaml-test-suite 4QFQ, M6YH, P2AD).
-    fn find_block_scalar_indent(&mut self, _base_indent: usize) -> Result<usize> {
+    /// non-empty line exists). A non-empty line whose indent is not
+    /// strictly deeper than `base_indent` is outside the scalar's
+    /// scope — that line is a sibling structure, not content
+    /// (yaml-test-suite K858).
+    fn find_block_scalar_indent(&mut self, base_indent: usize) -> Result<usize> {
         let saved_position = self.position;
         let saved_char = self.current_char;
         let saved_char_index = self.current_char_index;
@@ -2280,7 +2280,17 @@ impl BasicScanner {
                     continue;
                 }
                 Some(_) => {
-                    content_indent = line_indent;
+                    // If we're nested inside another block (i.e. the
+                    // indent stack has at least one entry above the
+                    // root) and this candidate line is not strictly
+                    // deeper than base_indent, it's a sibling outside
+                    // the scalar's scope (yaml-test-suite K858).
+                    let inside_block = self.indent_stack.len() > 1;
+                    if inside_block && line_indent <= base_indent {
+                        content_indent = max_blank_indent.max(base_indent + 1);
+                    } else {
+                        content_indent = line_indent;
+                    }
                     found = true;
                     break;
                 }

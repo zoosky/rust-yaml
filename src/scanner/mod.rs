@@ -765,12 +765,42 @@ impl BasicScanner {
                         'P' => value.push('\u{2029}'),
                         '\n' => {} // escaped line continuation — drop the newline
                         '\t' => value.push('\t'), // literal tab after `\` → tab (yaml-test-suite 3RLN/DE56)
-                        // Hex/unicode escapes \x## \u#### \U######## are not
-                        // yet implemented; treat them as currently accepted
-                        // pending a dedicated fix.
+                        // Hex / Unicode escapes per YAML 1.2 §5.7:
+                        //   \xNN     — 2 hex digits, codepoint  ≤ 0xFF
+                        //   \uNNNN   — 4 hex digits, codepoint  ≤ 0xFFFF
+                        //   \UNNNNNNNN — 8 hex digits, full Unicode codepoint
                         'x' | 'u' | 'U' => {
-                            value.push('\\');
-                            value.push(escaped);
+                            let n = match escaped {
+                                'x' => 2,
+                                'u' => 4,
+                                _ => 8,
+                            };
+                            self.advance(); // consume the x/u/U
+                            let mut codepoint: u32 = 0;
+                            for _ in 0..n {
+                                let c = self.current_char.ok_or_else(|| {
+                                    Error::scan(
+                                        self.position,
+                                        format!("Truncated \\{escaped} escape"),
+                                    )
+                                })?;
+                                let d = c.to_digit(16).ok_or_else(|| {
+                                    Error::scan(
+                                        self.position,
+                                        format!("Invalid hex digit `{c}` in \\{escaped} escape"),
+                                    )
+                                })?;
+                                codepoint = (codepoint << 4) | d;
+                                self.advance();
+                            }
+                            let ch = char::from_u32(codepoint).ok_or_else(|| {
+                                Error::scan(
+                                    self.position,
+                                    format!("Invalid Unicode codepoint U+{codepoint:X}"),
+                                )
+                            })?;
+                            value.push(ch);
+                            continue; // already advanced past hex digits
                         }
                         // Everything else is invalid per spec.
                         _ => {
@@ -2336,6 +2366,35 @@ mod tests {
         let str_end_idx = kinds.iter().position(|s| *s == "-STR");
         assert!(doc_end_idx.is_some(), "missing -DOC in event stream: {kinds:?}");
         assert!(doc_end_idx < str_end_idx, "expected -DOC before -STR, got {kinds:?}");
+    }
+
+    /// YAML 1.2 §5.7 hex / Unicode escapes in double-quoted strings.
+    #[test]
+    fn double_quoted_hex_escapes_decode_to_codepoint() {
+        use crate::parser::{BasicParser, EventType, Parser as ParserTrait};
+        for (input, expected) in [
+            (r#""\x41""#, "A"),
+            (r#""é""#, "é"),
+            (r#""\U0001F600""#, "\u{1f600}"),
+        ] {
+            let mut p = BasicParser::new_eager(input.to_string());
+            assert!(p.take_scanning_error().is_none(), "no scan error for {input}");
+            let mut found = None;
+            while let Ok(Some(ev)) = p.get_event() {
+                if let EventType::Scalar { value, .. } = ev.event_type {
+                    found = Some(value);
+                    break;
+                }
+            }
+            assert_eq!(found.as_deref(), Some(expected), "input {input}");
+        }
+    }
+
+    #[test]
+    fn truncated_hex_escape_is_a_scan_error() {
+        use crate::parser::{BasicParser, Parser as ParserTrait};
+        let mut p = BasicParser::new_eager(r#""\x4""#.to_string());
+        assert!(p.take_scanning_error().is_some(), "truncated \\x escape must error");
     }
 
     /// YAML 1.2 §5.7: double-quoted strings have a strict allowlist of escape

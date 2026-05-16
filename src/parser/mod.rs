@@ -909,6 +909,21 @@ impl BasicParser {
                     ParserState::BlockMapping
                     | ParserState::BlockMappingKey
                     | ParserState::BlockMappingValue => {
+                        // §6.9.1: if the innermost mapping has odd
+                        // children (last key has no value), synth an
+                        // implicit empty value before closing
+                        // (yaml-test-suite 7W2P).
+                        if innermost_mapping_has_odd_children(&self.events) {
+                            self.events.push(Event::scalar(
+                                token.start_position,
+                                None,
+                                None,
+                                String::new(),
+                                true,
+                                false,
+                                ScalarStyle::Plain,
+                            ));
+                        }
                         self.events.push(Event::mapping_end(token.start_position));
                         // Pop previous state from stack if available
                         if let Some(prev_state) = self.state_stack.pop() {

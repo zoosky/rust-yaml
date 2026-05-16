@@ -7,11 +7,11 @@ Live tracker for closing the gap between rust-yaml and the yaml/yaml-test-suite
 
 | Metric          | Value          |
 | --------------- | -------------- |
-| Tests passing   | **314 / 735** (42.7 %) |
+| Tests passing   | **341 / 735** (46.4 %) |
 | Parser hangs    | 0 ✅           |
 | Wrong-reject    | 42             |
-| Wrong-accept    | 129            |
-| Wrong-events    | 250            |
+| Wrong-accept    | 114            |
+| Wrong-events    | 238            |
 | Lib unit tests  | 163 passing    |
 
 Live results are written to `target/yaml-test-suite-failures.txt` after every
@@ -49,6 +49,19 @@ Session 2 commits (250 → 314 = +64):
 * `cfa7f69` Surface eager-parse errors + reject duplicate %YAML (+2).
 * `38d3f19` Reject anchor / tag on alias node (+4).
 * `fce1927` Reject directives outside the directive context (+7).
+
+Session 3 commits (314 → 341 = +27):
+
+* `02526b6` Transition to ImplicitDocumentStart after `...` (+2).
+* `e4d6409` Reject `#` adjacent to quoted scalar without space (+2).
+* `4c1ce52` Stop plain scalar at `:` followed by flow indicator.
+* `05f27a8` Error on unclosed quoted strings (+2).
+* `2619819` Comment `#` requires preceding whitespace (+4).
+* `7de06b7` Reject directive without document body at EOS (+4).
+* `60dceb4` Reject extra content after %YAML directive (+3).
+* `bfc33b2` Implicit empty scalar for empty `---` document (+6).
+* `5f0096d` Implicit empty scalar between back-to-back `---` (+2).
+* `59fa0b0` Implicit empty scalar for `---\n...` empty document (+2).
 
 ## Blocked clusters (need deeper refactors)
 

@@ -1635,17 +1635,18 @@ impl BasicScanner {
 
     /// Scan an identifier (used for anchor and alias names)
     fn scan_identifier(&mut self) -> Result<String> {
+        // Per YAML 1.2 §6.9.2 (ns-anchor-name = ns-anchor-char+), the only
+        // exclusions are whitespace and the flow indicators `,[]{}`. This
+        // accepts ASCII alphanumeric, underscore, hyphen, AND full unicode
+        // codepoints (including emoji), matching the spec exactly.
         let mut identifier = String::new();
-
         while let Some(ch) = self.current_char {
-            if ch.is_alphanumeric() || ch == '_' || ch == '-' {
-                identifier.push(ch);
-                self.advance();
-            } else {
+            if ch.is_whitespace() || matches!(ch, ',' | '[' | ']' | '{' | '}') {
                 break;
             }
+            identifier.push(ch);
+            self.advance();
         }
-
         Ok(identifier)
     }
 
@@ -2221,6 +2222,24 @@ mod tests {
             }
         }
         assert_eq!(keys, vec![":foo", "bar"]);
+    }
+
+    /// YAML 1.2 §6.9.2: anchor / alias names exclude only whitespace and
+    /// the flow indicators `,[]{}`. Earlier implementations restricted
+    /// `scan_identifier` to ASCII alphanumeric / `_` / `-`, which rejected
+    /// valid unicode anchors like `&😁`. Tracked by yaml-test-suite 8XYN.
+    #[test]
+    fn anchor_name_may_contain_unicode_symbols() {
+        use crate::parser::{BasicParser, EventType, Parser as ParserTrait};
+        let mut p = BasicParser::new_eager("---\n- &😁 unicode anchor\n".to_string());
+        assert!(p.take_scanning_error().is_none(), "unicode anchor must not error");
+        let mut anchors = Vec::new();
+        while let Ok(Some(ev)) = p.get_event() {
+            if let EventType::Scalar { anchor: Some(a), .. } = ev.event_type {
+                anchors.push(a);
+            }
+        }
+        assert_eq!(anchors, vec!["😁"]);
     }
 
     /// YAML 1.2 §5.6 / RFC 3986 percent-encoding: tag suffixes may contain

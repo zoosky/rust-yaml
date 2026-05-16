@@ -7,12 +7,12 @@ Live tracker for closing the gap between rust-yaml and the yaml/yaml-test-suite
 
 | Metric          | Value          |
 | --------------- | -------------- |
-| Tests passing   | **373 / 735** (50.7 %) |
+| Tests passing   | **424 / 735** (57.7 %) |
 | Parser hangs    | 0 ✅           |
-| Wrong-reject    | 38             |
+| Wrong-reject    | 42             |
 | Wrong-accept    | 102            |
-| Wrong-events    | 222            |
-| Lib unit tests  | 163 passing    |
+| Wrong-events    | 167            |
+| Lib unit tests  | 169 passing    |
 
 Live results are written to `target/yaml-test-suite-failures.txt` after every
 `make test-yaml-suite` run. Categories: `Timeouts`, `Wrong reject`,
@@ -71,6 +71,12 @@ Session 4 commits (341 → 373 = +32):
 * `3df22e4` Close open collections before `---` starts new document (+12).
 * `66597f2` Close open collections before final DocumentEnd at EOS (+6).
 * `2f3830f` Close open collections before explicit `...` DocumentEnd (+2).
+
+Session 5 commits (377 → 424 = +47):
+
+* `265ea5a` Implement §8.1.1.2 block-scalar chomping (clip/strip/keep)
+  and fix `find_block_scalar_indent` single-line bug (+47, biggest
+  single-commit win since session 2).
 
 ## Blocked clusters (need deeper refactors)
 

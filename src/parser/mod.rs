@@ -1114,16 +1114,18 @@ impl BasicParser {
                 }
 
                 // §7.5: a flow-sequence entry that is itself `key: value`
-                // is an implicit single-pair flow mapping
-                // (yaml-test-suite QF4Y, L9U5, 87E4, 8UDB, 9MMW, LX3P).
+                // is an implicit single-pair flow mapping. Any
+                // pending anchor/tag belongs to the KEY scalar, not
+                // to the synthesised mapping (yaml-test-suite QF4Y,
+                // L9U5, 87E4, 8UDB, 9MMW, LX3P, CN3R).
                 if matches!(self.state, ParserState::FlowSequence) {
                     if let Ok(Some(next_token)) = self.scanner.peek_token() {
                         if matches!(next_token.token_type, TokenType::Value) {
                             self.state_stack.push(self.state);
                             self.events.push(Event::mapping_start(
                                 token.start_position,
-                                self.pending_anchor.take(),
-                                self.pending_tag.take(),
+                                None,
+                                None,
                                 true,
                             ));
                             self.state = ParserState::FlowMappingKey;

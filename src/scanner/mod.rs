@@ -2504,18 +2504,26 @@ impl BasicScanner {
         Ok(apply_chomping(content, chomping))
     }
 
-    /// Check if the current position is the start of a mapping key by looking ahead for ':'
+    /// Look ahead on the current line for a `:` that marks a mapping key.
+    ///
+    /// Per YAML 1.2 §7.3.3, a plain scalar may legally contain a `:` that
+    /// is not followed by whitespace (e.g. `key::sub: value`). Only `: `
+    /// (colon followed by whitespace or end-of-line) terminates the
+    /// scalar and signals a mapping. We therefore scan the whole line
+    /// for any qualifying `:`, rather than returning on the first one.
     fn check_for_mapping_ahead(&self) -> bool {
-        // Look ahead through the current line for a ':' character
         for i in self.current_char_index..self.char_cache.len() {
             let ch = self.char_cache[i];
             match ch {
+                '\n' | '\r' => return false,
                 ':' => {
-                    // Found colon, check if it's followed by whitespace or end of line
-                    let next_char = self.char_cache.get(i + 1).copied();
-                    return next_char.map_or(true, |c| c.is_whitespace());
+                    let next = self.char_cache.get(i + 1).copied();
+                    match next {
+                        None => return true,
+                        Some(c) if c.is_whitespace() => return true,
+                        _ => { /* inner colon, keep scanning */ }
+                    }
                 }
-                '\n' | '\r' => break, // End of line, no colon found
                 _ => {}
             }
         }

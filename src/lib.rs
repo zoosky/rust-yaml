@@ -381,6 +381,39 @@ prod: *base
         assert_eq!(parse_scalar_value(yaml), "a\nb\n");
     }
 
+    /// Plain scalars may legally contain a `:` that is *not* followed by
+    /// whitespace (§7.3.3). The scanner must scan past such colons and
+    /// only treat a `: ` (colon + whitespace) as a key/value separator.
+    /// See yaml-test-suite case 8CWC.
+    #[test]
+    fn test_plain_scalar_key_may_contain_inner_colons() {
+        let yaml = "ab::cd: value\n";
+        let mut parser = BasicParser::new_eager(yaml.to_string());
+        let mut events = Vec::new();
+        while parser.check_event() {
+            if let Ok(Some(event)) = parser.get_event() {
+                events.push(event);
+            } else {
+                break;
+            }
+        }
+        let has_mapping = events
+            .iter()
+            .any(|e| matches!(e.event_type, EventType::MappingStart { .. }));
+        assert!(
+            has_mapping,
+            "Plain scalar `ab::cd: value` should open a mapping; events were {events:?}"
+        );
+        let scalars: Vec<&str> = events
+            .iter()
+            .filter_map(|e| match &e.event_type {
+                EventType::Scalar { value, .. } => Some(value.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(scalars, vec!["ab::cd", "value"], "key/value split incorrect");
+    }
+
     #[test]
     fn test_explicit_type_tags() {
         let yaml_with_tags = r"

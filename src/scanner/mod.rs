@@ -764,6 +764,7 @@ impl BasicScanner {
                         'L' => value.push('\u{2028}'),
                         'P' => value.push('\u{2029}'),
                         '\n' => {} // escaped line continuation — drop the newline
+                        '\t' => value.push('\t'), // literal tab after `\` → tab (yaml-test-suite 3RLN/DE56)
                         // Hex/unicode escapes \x## \u#### \U######## are not
                         // yet implemented; treat them as currently accepted
                         // pending a dedicated fix.

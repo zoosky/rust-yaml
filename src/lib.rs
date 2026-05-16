@@ -381,6 +381,46 @@ prod: *base
         assert_eq!(parse_scalar_value(yaml), "a\nb\n");
     }
 
+    /// A line beginning with `:` denotes a mapping entry with an implicit
+    /// empty key. The parser must open a block mapping (if not already in
+    /// one) and synthesise the empty key. yaml-test-suite case 2JQS.
+    #[test]
+    fn test_leading_colon_implies_empty_key() {
+        let yaml = ": a\n: b\n";
+        let mut parser = BasicParser::new_eager(yaml.to_string());
+        let mut events = Vec::new();
+        while parser.check_event() {
+            if let Ok(Some(event)) = parser.get_event() {
+                events.push(event);
+            } else {
+                break;
+            }
+        }
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e.event_type, EventType::MappingStart { .. })),
+            "Expected MappingStart for leading-colon mapping; events: {events:?}"
+        );
+        let scalars: Vec<String> = events
+            .iter()
+            .filter_map(|e| match &e.event_type {
+                EventType::Scalar { value, .. } => Some(value.clone()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            scalars,
+            vec![
+                String::new(),
+                "a".to_string(),
+                String::new(),
+                "b".to_string(),
+            ],
+            "Expected empty-key/value pairs; got {scalars:?}"
+        );
+    }
+
     /// Two `? key` markers in a row mean the first key has no value.
     /// The parser must synthesise an implicit empty scalar between them
     /// so the mapping has an even number of children. See yaml-test-suite

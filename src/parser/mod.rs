@@ -903,19 +903,32 @@ impl BasicParser {
                 // Emit the empty value first (consuming any pending
                 // anchor/tag — those were intended for the missing
                 // value), then transition back to BlockMappingKey.
+                //
+                // BUT: if the most recent event was an implicit empty
+                // scalar (e.g. we just synthesised an empty key for a
+                // leading-`:` mapping entry, 2JQS), this scalar is the
+                // VALUE for that empty key and not a new key.
                 if matches!(self.state, ParserState::BlockMappingValue) {
-                    if let Ok(Some(next_token)) = self.scanner.peek_token() {
-                        if matches!(next_token.token_type, TokenType::Value) {
-                            self.events.push(Event::scalar(
-                                token.start_position,
-                                self.pending_anchor.take(),
-                                self.pending_tag.take(),
-                                String::new(),
-                                true,
-                                false,
-                                ScalarStyle::Plain,
-                            ));
-                            self.state = ParserState::BlockMappingKey;
+                    let last_was_implicit_empty =
+                        matches!(self.events.last(), Some(ev) if matches!(
+                            &ev.event_type,
+                            EventType::Scalar { value, plain_implicit: true, style: ScalarStyle::Plain, .. }
+                                if value.is_empty()
+                        ));
+                    if !last_was_implicit_empty {
+                        if let Ok(Some(next_token)) = self.scanner.peek_token() {
+                            if matches!(next_token.token_type, TokenType::Value) {
+                                self.events.push(Event::scalar(
+                                    token.start_position,
+                                    self.pending_anchor.take(),
+                                    self.pending_tag.take(),
+                                    String::new(),
+                                    true,
+                                    false,
+                                    ScalarStyle::Plain,
+                                ));
+                                self.state = ParserState::BlockMappingKey;
+                            }
                         }
                     }
                 }
@@ -1049,18 +1062,73 @@ impl BasicParser {
             }
 
             TokenType::Value => {
-                // Key-value separator in mappings
+                // YAML 1.2 §6.9.1: a `:` with no preceding key implies an
+                // empty key. Handle the four states where this can arise:
+                //   * ImplicitDocumentStart — open `+DOC`, `+MAP`, empty key.
+                //   * DocumentContent — open `+MAP`, empty key.
+                //   * BlockMappingKey with EVEN children — empty key for
+                //     the next entry (no scalar preceded the `:`).
+                //   * Normal cases (`BlockMappingKey` with odd children,
+                //     `FlowMappingKey`) — just transition state.
                 match self.state {
+                    ParserState::ImplicitDocumentStart => {
+                        let event =
+                            self.create_implicit_document_start(token.start_position);
+                        self.events.push(event);
+                        self.events.push(Event::mapping_start(
+                            token.start_position,
+                            self.pending_anchor.take(),
+                            self.pending_tag.take(),
+                            false,
+                        ));
+                        self.events.push(Event::scalar(
+                            token.start_position,
+                            None,
+                            None,
+                            String::new(),
+                            true,
+                            false,
+                            ScalarStyle::Plain,
+                        ));
+                        self.state = ParserState::BlockMappingValue;
+                    }
+                    ParserState::DocumentContent | ParserState::DocumentStart => {
+                        self.events.push(Event::mapping_start(
+                            token.start_position,
+                            self.pending_anchor.take(),
+                            self.pending_tag.take(),
+                            false,
+                        ));
+                        self.events.push(Event::scalar(
+                            token.start_position,
+                            None,
+                            None,
+                            String::new(),
+                            true,
+                            false,
+                            ScalarStyle::Plain,
+                        ));
+                        self.state = ParserState::BlockMappingValue;
+                    }
                     ParserState::BlockMappingKey => {
+                        if !innermost_mapping_has_odd_children(&self.events) {
+                            // Missing key — synthesise empty scalar first.
+                            self.events.push(Event::scalar(
+                                token.start_position,
+                                None,
+                                None,
+                                String::new(),
+                                true,
+                                false,
+                                ScalarStyle::Plain,
+                            ));
+                        }
                         self.state = ParserState::BlockMappingValue;
                     }
                     ParserState::FlowMappingKey => {
                         self.state = ParserState::FlowMappingValue;
                     }
-                    _ => {
-                        // In other contexts, Value token doesn't change state
-                        // It's handled by the scanner's mapping detection logic
-                    }
+                    _ => {}
                 }
             }
 

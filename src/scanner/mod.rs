@@ -2266,7 +2266,12 @@ impl BasicScanner {
             }
 
             match self.current_char {
-                None => break,
+                None => {
+                    if line_indent > max_blank_indent {
+                        max_blank_indent = line_indent;
+                    }
+                    break;
+                }
                 Some('\n') | Some('\r') => {
                     if line_indent > max_blank_indent {
                         max_blank_indent = line_indent;
@@ -2363,9 +2368,10 @@ impl BasicScanner {
             }
 
             if line_is_blank {
-                // Empty line only counts when there's an actual line break
-                // to consume. EOF after the previous line's `\n` is not a
-                // phantom trailing blank.
+                // A blank line counts when there's an actual line break
+                // to consume. EOF after we've consumed some whitespace
+                // on the trailing line ALSO counts as one final blank
+                // line (yaml-test-suite JEF9/02: `- |+\n        `).
                 if matches!(self.current_char, Some('\n') | Some('\r')) {
                     // Whitespace beyond content_indent is literal content
                     // even on blank lines (yaml-test-suite 6FWR).
@@ -2375,6 +2381,12 @@ impl BasicScanner {
                     content.push('\n');
                     self.advance();
                     continue;
+                }
+                if line_indent > 0 {
+                    for _ in content_indent..line_indent {
+                        content.push(' ');
+                    }
+                    content.push('\n');
                 }
                 break;
             }

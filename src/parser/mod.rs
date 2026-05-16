@@ -1388,6 +1388,27 @@ impl BasicParser {
                     ParserState::FlowMappingKey => {
                         self.state = ParserState::FlowMappingValue;
                     }
+                    ParserState::FlowMapping => {
+                        // §7.5: in FlowMapping state, a `:` separates
+                        // an emitted key from its value (odd children
+                        // means the key scalar is already on the
+                        // stack — normal). If children are even,
+                        // we're starting a new entry with an empty
+                        // key (yaml-test-suite NKF9 \`{ key: value, :
+                        // empty key }\`).
+                        if !innermost_mapping_has_odd_children(&self.events) {
+                            self.events.push(Event::scalar(
+                                token.start_position,
+                                None,
+                                None,
+                                String::new(),
+                                true,
+                                false,
+                                ScalarStyle::Plain,
+                            ));
+                        }
+                        self.state = ParserState::FlowMappingValue;
+                    }
                     ParserState::FlowSequence => {
                         // §7.5: `[ : value ]` — leading `:` with no
                         // preceding scalar implies an empty key for an
@@ -1432,12 +1453,15 @@ impl BasicParser {
                     ));
                 }
                 // §7.5: inside a flow mapping, a comma terminates the
-                // current entry. If the entry had only a key (no `:`),
-                // synth an implicit empty value (yaml-test-suite 8KB6,
-                // 9BXH).
+                // current entry. If the entry is missing its value
+                // (state FlowMappingValue or odd children), synth an
+                // implicit empty scalar (yaml-test-suite 8KB6, 9BXH,
+                // FRK4).
                 if matches!(
                     self.state,
-                    ParserState::FlowMapping | ParserState::FlowMappingKey
+                    ParserState::FlowMapping
+                        | ParserState::FlowMappingKey
+                        | ParserState::FlowMappingValue
                 ) && innermost_mapping_has_odd_children(&self.events)
                 {
                     self.events.push(Event::scalar(

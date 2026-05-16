@@ -2275,14 +2275,14 @@ impl BasicScanner {
                     continue;
                 }
                 Some(_) => {
-                    content_indent = line_indent.max(1);
+                    content_indent = line_indent;
                     found = true;
                     break;
                 }
             }
         }
 
-        if !found && max_blank_indent > 0 {
+        if !found {
             content_indent = max_blank_indent;
         }
 
@@ -2352,6 +2352,16 @@ impl BasicScanner {
                 break;
             }
 
+            // Document marker at line start always ends the scalar,
+            // regardless of content_indent (allows zero-indented
+            // block scalars per yaml-test-suite FP8R).
+            if line_indent == 0 && self.is_doc_marker_here() {
+                self.position = save_pos;
+                self.current_char = save_ch;
+                self.current_char_index = save_idx;
+                break;
+            }
+
             if line_is_blank {
                 // Empty line only counts when there's an actual line break
                 // to consume. EOF after the previous line's `\n` is not a
@@ -2395,6 +2405,17 @@ impl BasicScanner {
         Ok(apply_chomping(content, chomping))
     }
 
+    /// Check if cursor is at `---` or `...` followed by whitespace/EOL.
+    fn is_doc_marker_here(&self) -> bool {
+        let c0 = self.current_char;
+        let c1 = self.peek_char(1);
+        let c2 = self.peek_char(2);
+        let c3 = self.peek_char(3);
+        let trailing_ok = c3.map_or(true, |c| c.is_whitespace());
+        (c0 == Some('-') && c1 == Some('-') && c2 == Some('-') && trailing_ok)
+            || (c0 == Some('.') && c1 == Some('.') && c2 == Some('.') && trailing_ok)
+    }
+
     /// Collect content for a folded block scalar.
     ///
     /// Folding rules (§8.1.3): a sequence of single blank lines between
@@ -2433,6 +2454,13 @@ impl BasicScanner {
             let line_is_blank = matches!(self.current_char, Some('\n') | Some('\r') | None);
 
             if !line_is_blank && line_indent < content_indent {
+                self.position = save_pos;
+                self.current_char = save_ch;
+                self.current_char_index = save_idx;
+                break;
+            }
+
+            if line_indent == 0 && self.is_doc_marker_here() {
                 self.position = save_pos;
                 self.current_char = save_ch;
                 self.current_char_index = save_idx;

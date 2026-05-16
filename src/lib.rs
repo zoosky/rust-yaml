@@ -365,6 +365,23 @@ prod: *base
     }
 
     #[test]
+    fn test_folded_preserves_breaks_around_more_indented() {
+        // §8.1.3.2: empty lines adjacent to more-indented content
+        // preserve every break instead of collapsing.
+        let yaml = ">\n a b\n\n   c d\n";
+        // "a b" (Normal) → empty → "  c d" (MoreIndented):
+        // 1 empty + adjacent MoreIndented → 2 newlines.
+        assert_eq!(parse_scalar_value(yaml), "a b\n\n  c d\n");
+    }
+
+    #[test]
+    fn test_folded_collapses_breaks_between_normal_only() {
+        // Normal-Normal, 1 empty line → 1 newline (one break folded out).
+        let yaml = ">\n a\n\n b\n";
+        assert_eq!(parse_scalar_value(yaml), "a\nb\n");
+    }
+
+    #[test]
     fn test_explicit_type_tags() {
         let yaml_with_tags = r"
 string_value: !!str 42

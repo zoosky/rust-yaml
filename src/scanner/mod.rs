@@ -2457,20 +2457,26 @@ impl BasicScanner {
                         j += 1;
                     }
                     if j < lines.len() {
-                        // Another content line follows. Fold rule:
-                        // - 0 empties between Normal lines → space.
-                        // - 0 empties around a MoreIndented line → newline.
-                        // - k empties → k newlines.
+                        // Spec §8.1.3.2: folding behaviour depends on
+                        // whether either surrounding content line is
+                        // "more indented" than the content indent.
+                        // - both Normal, 0 empties → fold to space.
+                        // - both Normal, k empties → k newlines (one
+                        //   break folded out).
+                        // - any MoreIndented, 0 empties → 1 newline.
+                        // - any MoreIndented, k empties → k+1 newlines
+                        //   (every break preserved).
+                        let mi_adjacent = line.kind == LineKind::MoreIndented
+                            || lines[j].kind == LineKind::MoreIndented;
                         if empties == 0 {
-                            if line.kind == LineKind::MoreIndented
-                                || lines[j].kind == LineKind::MoreIndented
-                            {
+                            if mi_adjacent {
                                 content.push('\n');
                             } else {
                                 content.push(' ');
                             }
                         } else {
-                            for _ in 0..empties {
+                            let breaks = if mi_adjacent { empties + 1 } else { empties };
+                            for _ in 0..breaks {
                                 content.push('\n');
                             }
                         }

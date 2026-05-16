@@ -621,9 +621,13 @@ impl BasicScanner {
                 } else {
                     match ch {
                         ',' | '[' | ']' | '{' | '}' => break,
+                        // In flow context, `:` is a key-value separator
+                        // when followed by whitespace OR any flow indicator
+                        // (`,`, `[`, `]`, `{`, `}`). Tracked by yaml-test-
+                        // suite FRK4 (`{ ? foo :, ... }`).
                         ':' if self
                             .peek_char(1)
-                            .map_or(true, |c| c.is_whitespace() || "]}".contains(c)) =>
+                            .map_or(true, |c| c.is_whitespace() || ",[]{}".contains(c)) =>
                         {
                             break;
                         }

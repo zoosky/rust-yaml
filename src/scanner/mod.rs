@@ -808,6 +808,11 @@ impl BasicScanner {
         self.advance(); // Skip opening quote
         let mut closed = false;
         let mut multi_line = false;
+        // High-water mark of bytes contributed by escape sequences. The
+        // trailing-whitespace strip at fold time must not pop past it,
+        // because an escape-produced \t / space is literal content
+        // (yaml-test-suite DE56/00, DE56/01).
+        let mut escape_end: usize = 0;
 
         while let Some(ch) = self.current_char {
             if ch == quote_char {
@@ -891,6 +896,7 @@ impl BasicScanner {
                                 )
                             })?;
                             value.push(ch);
+                            escape_end = value.len();
                             continue; // already advanced past hex digits
                         }
                         // Everything else is invalid per spec.
@@ -901,6 +907,7 @@ impl BasicScanner {
                             ));
                         }
                     }
+                    escape_end = value.len();
                     self.advance();
                 }
             } else if ch == '\\' {
@@ -931,8 +938,12 @@ impl BasicScanner {
                     }
                 }
                 // Drop trailing whitespace on the prior line (the bytes
-                // we already pushed) before applying the fold.
-                while matches!(value.chars().last(), Some(' ' | '\t')) {
+                // we already pushed) before applying the fold. Don't
+                // strip past `escape_end` — escape-produced whitespace
+                // is literal content, not "trailing" line whitespace.
+                while value.len() > escape_end
+                    && matches!(value.chars().last(), Some(' ' | '\t'))
+                {
                     value.pop();
                 }
                 if newlines <= 1 {

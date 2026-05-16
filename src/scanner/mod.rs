@@ -645,6 +645,12 @@ impl BasicScanner {
                     }
                 } else {
                     match ch {
+                        // Same line-break handling as block context: stop
+                        // collecting raw content at `\n`/`\r`, then let the
+                        // outer fold logic decide whether the next line
+                        // continues this scalar (yaml-test-suite 8KB6,
+                        // 8UDB, 9BXH).
+                        '\n' | '\r' => break,
                         ',' | '[' | ']' | '{' | '}' => break,
                         // In flow context, `:` is a key-value separator
                         // when followed by whitespace OR any flow indicator
@@ -717,16 +723,19 @@ impl BasicScanner {
                 && self.peek_char(2) == next_ch
                 && self.peek_char(3).map_or(true, |c| c.is_whitespace());
 
-            // Continuation column must be >= the scalar's start column.
-            // `>=` (not `>`) is correct for plain scalars at line head:
-            // `---word1\nword2` (both at col 1) is a single folded scalar.
-            // For scalars indented as a mapping value (e.g. `k: v1\n  v2`),
-            // start_col will be the value's column and the check still
-            // requires the continuation to be at least that deep.
+            // Continuation column must be >= the scalar's start column
+            // in BLOCK context (`>=` for `---word1\nword2`, mapping values
+            // with `k: v1\n  v2`, etc.). In FLOW context the column rule
+            // doesn't apply: continuation just needs to land on a
+            // non-flow-indicator character (yaml-test-suite 8KB6,
+            // multi-line flow keys).
+            let column_ok =
+                self.flow_level > 0 || next_col >= start_col;
             let can_continue = next_ch.is_some()
                 && !matches!(next_ch, Some('\n' | '\r' | '#'))
-                && next_col >= start_col
-                && !is_doc_marker;
+                && column_ok
+                && !is_doc_marker
+                && !(self.flow_level > 0 && matches!(next_ch, Some(',' | ']' | '}')));
 
             if !can_continue {
                 self.position = saved_position;

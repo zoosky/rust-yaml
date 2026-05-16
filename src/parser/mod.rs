@@ -816,7 +816,15 @@ impl BasicParser {
             }
 
             TokenType::Anchor(name) => {
-                // Store the anchor name to be used with the next node
+                // YAML 1.2 §6.9.2: a node may have at most one anchor.
+                // A second anchor before the node is consumed is invalid
+                // (yaml-test-suite 4JVG).
+                if self.pending_anchor.is_some() {
+                    return Err(Error::parse(
+                        token.start_position,
+                        "Node may not have more than one anchor",
+                    ));
+                }
                 self.pending_anchor = Some(name.clone());
             }
 

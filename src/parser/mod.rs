@@ -866,6 +866,18 @@ impl BasicParser {
                         ));
                         self.state = ParserState::BlockMappingKey;
                     }
+                    ParserState::DocumentStart => {
+                        // Explicit document start (`---`) followed by a
+                        // complex-key marker — open the document body as
+                        // an implicit block mapping (yaml-test-suite 2XXW).
+                        self.events.push(Event::mapping_start(
+                            token.start_position,
+                            self.pending_anchor.take(),
+                            self.pending_tag.take(),
+                            false,
+                        ));
+                        self.state = ParserState::BlockMappingKey;
+                    }
                     ParserState::DocumentContent => {
                         // Check if we just finished a mapping - if so, continue it instead of starting new one
                         // This happens when the previous mapping key-value pair was processed but no BlockEnd was generated

@@ -2224,6 +2224,39 @@ mod tests {
         assert_eq!(keys, vec![":foo", "bar"]);
     }
 
+    /// YAML 1.2: a complex-key marker (`?`) is the first content after an
+    /// explicit document start (`---`) — it should open an implicit block
+    /// mapping. The previous parser handled `?` only in
+    /// `ImplicitDocumentStart` / `DocumentContent` / already-in-mapping
+    /// states and errored out for `DocumentStart`, breaking inputs like
+    /// `--- !!set\n? Mark McGwire\n...`. Tracked by yaml-test-suite 2XXW.
+    #[test]
+    fn complex_key_directly_after_explicit_doc_start_opens_mapping() {
+        use crate::parser::{BasicParser, EventType, Parser as ParserTrait};
+        let mut p = BasicParser::new_eager(
+            "--- !!set\n? Mark McGwire\n? Sammy Sosa\n".to_string(),
+        );
+        assert!(p.take_scanning_error().is_none());
+        let mut saw_map_start = false;
+        let mut saw_error = false;
+        loop {
+            match p.get_event() {
+                Ok(Some(ev)) => {
+                    if matches!(ev.event_type, EventType::MappingStart { .. }) {
+                        saw_map_start = true;
+                    }
+                }
+                Ok(None) => break,
+                Err(_) => {
+                    saw_error = true;
+                    break;
+                }
+            }
+        }
+        assert!(!saw_error, "complex key after `--- !!set` must not error");
+        assert!(saw_map_start, "expected a MappingStart event");
+    }
+
     /// YAML 1.2 §6.9.2: anchor / alias names exclude only whitespace and
     /// the flow indicators `,[]{}`. Earlier implementations restricted
     /// `scan_identifier` to ASCII alphanumeric / `_` / `-`, which rejected

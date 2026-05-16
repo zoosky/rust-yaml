@@ -959,8 +959,18 @@ impl BasicParser {
                         // §6.9.1: if the innermost mapping has odd
                         // children (last key has no value), synth an
                         // implicit empty value before closing
-                        // (yaml-test-suite 7W2P).
+                        // (yaml-test-suite 7W2P). If the unmatched key
+                        // came from a bare scalar with no `:`
+                        // (yaml-test-suite 7MNF), error instead.
                         if innermost_mapping_has_odd_children(&self.events) {
+                            if matches!(self.state, ParserState::BlockMappingKey)
+                                && !self.explicit_key_pending
+                            {
+                                return Err(Error::parse(
+                                    token.start_position,
+                                    "Mapping key not followed by `:`",
+                                ));
+                            }
                             self.events.push(Event::scalar(
                                 token.start_position,
                                 None,

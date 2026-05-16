@@ -7,11 +7,11 @@ Live tracker for closing the gap between rust-yaml and the yaml/yaml-test-suite
 
 | Metric          | Value          |
 | --------------- | -------------- |
-| Tests passing   | **483 / 735** (65.7 %) |
+| Tests passing   | **534 / 735** (72.7 %) |
 | Parser hangs    | 0 ✅           |
-| Wrong-reject    | 40             |
-| Wrong-accept    | 95             |
-| Wrong-events    | 117            |
+| Wrong-reject    | 38             |
+| Wrong-accept    | 89             |
+| Wrong-events    | 74             |
 | Lib unit tests  | 177 passing    |
 
 Live results are written to `target/yaml-test-suite-failures.txt` after every
@@ -72,7 +72,7 @@ Session 4 commits (341 → 373 = +32):
 * `66597f2` Close open collections before final DocumentEnd at EOS (+6).
 * `2f3830f` Close open collections before explicit `...` DocumentEnd (+2).
 
-Session 5 commits (377 → 483 = +106):
+Session 5 commits (377 → 534 = +157):
 
 * `265ea5a` Implement §8.1.1.2 block-scalar chomping (clip/strip/keep)
   and fix `find_block_scalar_indent` single-line bug (+47, biggest
@@ -120,6 +120,30 @@ Session 5 commits (377 → 483 = +106):
 * `262c98f` Trim trailing whitespace before plain-scalar fold so
   `a\nb  \n  c\nd\n\ne` folds to `a b c d\ne` instead of leaking
   the trailing spaces (+6). 65.7%.
+* `ae48850` Reject implicit mapping key without `:` at end of
+  stream — tracks `explicit_key_pending` to distinguish from
+  spec-legal `? key` (+2).
+* `3983360` Re-run `handle_indentation` after a block scalar so
+  the next sibling `-` / `key:` dispatches against fresh
+  `current_indent` (+6).
+* `f942073` Synth empty value at BlockEnd when innermost map has
+  odd children (yaml-test-suite 7W2P) (+3).
+* `9039477` Synth empty value for key-only flow mapping entries
+  at FlowEntry / FlowMappingEnd (+6). 68.0%.
+* `9715e31` Fold multi-line plain scalars in flow context — break
+  at `\n`/`\r` in the flow-content match arm + relaxed column rule
+  for continuation in flow (+6).
+* `394e21c` Block-scalar `base_indent` reads from `indent_stack`
+  (not stale `current_indent`) so `|N` inside a sequence item
+  resolves correctly (+4).
+* `83795c9` Parent-aware multi-line plain scalar continuation per
+  §6.5 / §7.3.3 — continuation must be at column N+2 or deeper
+  (parent block at indent N has keys at N+1) (+14, single biggest
+  win in this stretch).
+* `0e94cc8` Implicit single-pair flow mapping inside flow sequence
+  per §7.5 — track open implicit pairs in
+  `implicit_flow_pair_depth` so `,` / `]` close them before
+  continuing the outer sequence (+10). **72.7%** milestone reached.
 
 ## Blocked clusters (need deeper refactors)
 

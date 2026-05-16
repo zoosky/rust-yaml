@@ -1144,16 +1144,18 @@ impl BasicParser {
                         let event =
                             self.create_implicit_document_start(token.start_position);
                         self.events.push(event);
+                        // The mapping itself has no anchor/tag here —
+                        // those (if any) belong to the (empty) key.
                         self.events.push(Event::mapping_start(
                             token.start_position,
-                            self.pending_anchor.take(),
-                            self.pending_tag.take(),
+                            None,
+                            None,
                             false,
                         ));
                         self.events.push(Event::scalar(
                             token.start_position,
-                            None,
-                            None,
+                            self.pending_anchor.take(),
+                            self.pending_tag.take(),
                             String::new(),
                             true,
                             false,
@@ -1164,14 +1166,14 @@ impl BasicParser {
                     ParserState::DocumentContent | ParserState::DocumentStart => {
                         self.events.push(Event::mapping_start(
                             token.start_position,
-                            self.pending_anchor.take(),
-                            self.pending_tag.take(),
+                            None,
+                            None,
                             false,
                         ));
                         self.events.push(Event::scalar(
                             token.start_position,
-                            None,
-                            None,
+                            self.pending_anchor.take(),
+                            self.pending_tag.take(),
                             String::new(),
                             true,
                             false,
@@ -1181,11 +1183,13 @@ impl BasicParser {
                     }
                     ParserState::BlockMappingKey => {
                         if !innermost_mapping_has_odd_children(&self.events) {
-                            // Missing key — synthesise empty scalar first.
+                            // Missing key — synthesise empty scalar
+                            // first. Pending anchor/tag belongs to that
+                            // empty key (yaml-test-suite PW8X).
                             self.events.push(Event::scalar(
                                 token.start_position,
-                                None,
-                                None,
+                                self.pending_anchor.take(),
+                                self.pending_tag.take(),
                                 String::new(),
                                 true,
                                 false,

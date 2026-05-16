@@ -858,6 +858,15 @@ impl BasicParser {
                         format!("Alias `*{name}` references an undefined anchor"),
                     ));
                 }
+                // §6.9.2: an alias is a reference, not an independent
+                // node — it cannot carry an anchor or tag of its own
+                // (yaml-test-suite SR86, SU74).
+                if self.pending_anchor.is_some() || self.pending_tag.is_some() {
+                    return Err(Error::parse(
+                        token.start_position,
+                        "Alias may not have an anchor or tag",
+                    ));
+                }
                 if matches!(self.state, ParserState::ImplicitDocumentStart) {
                     self.events.push(Event::document_start(
                         token.start_position,

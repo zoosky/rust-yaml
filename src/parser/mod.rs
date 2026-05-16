@@ -1037,44 +1037,45 @@ impl BasicParser {
                 // intervening `---` / `...`) is invalid — e.g. \`word1
                 // # cmt\nword2\` after the comment breaks the first
                 // scalar (yaml-test-suite BS4K, BF9H, 8XDJ).
+                //
+                // Only error if NO collection is still open since the
+                // most recent DocumentStart. If we're mid-mapping or
+                // mid-sequence the new scalar is just a child node.
                 if matches!(self.state, ParserState::DocumentContent) {
-                    let after_doc_start = self
-                        .events
-                        .iter()
-                        .rev()
-                        .find(|e| {
-                            matches!(
-                                e.event_type,
-                                EventType::DocumentStart { .. }
-                                    | EventType::DocumentEnd { .. }
-                            )
-                        })
-                        .map_or(false, |e| matches!(
-                            e.event_type,
-                            EventType::DocumentStart { .. }
-                        ));
-                    if after_doc_start {
-                        let has_root_node = self.events.iter().rev().any(|e| {
-                            if matches!(
-                                e.event_type,
-                                EventType::DocumentStart { .. }
-                            ) {
-                                return false;
+                    let mut after_doc_start = false;
+                    let mut has_root_node = false;
+                    let mut depth = 0i32;
+                    for e in self.events.iter() {
+                        match &e.event_type {
+                            EventType::DocumentStart { .. } => {
+                                after_doc_start = true;
+                                has_root_node = false;
+                                depth = 0;
                             }
-                            matches!(
-                                e.event_type,
-                                EventType::Scalar { .. }
-                                    | EventType::Alias { .. }
-                                    | EventType::MappingEnd
-                                    | EventType::SequenceEnd
-                            )
-                        });
-                        if has_root_node {
-                            return Err(Error::parse(
-                                token.start_position,
-                                "Document already contains a root node",
-                            ));
+                            EventType::DocumentEnd { .. } => {
+                                after_doc_start = false;
+                            }
+                            EventType::MappingStart { .. }
+                            | EventType::SequenceStart { .. } => depth += 1,
+                            EventType::MappingEnd | EventType::SequenceEnd => {
+                                depth -= 1;
+                                if depth == 0 {
+                                    has_root_node = true;
+                                }
+                            }
+                            EventType::Scalar { .. } | EventType::Alias { .. } => {
+                                if depth == 0 {
+                                    has_root_node = true;
+                                }
+                            }
+                            _ => {}
                         }
+                    }
+                    if after_doc_start && has_root_node && depth == 0 {
+                        return Err(Error::parse(
+                            token.start_position,
+                            "Document already contains a root node",
+                        ));
                     }
                 }
 

@@ -887,6 +887,30 @@ impl BasicScanner {
         self.resource_tracker
             .check_string_length(&self.limits, value.len())?;
 
+        // YAML 1.2 §7.3.1 / §7.3.2: after the closing quote, the rest of
+        // the line (or sub-expression in flow context) must be empty save
+        // for a separator. Skip horizontal whitespace and look at the next
+        // non-space char; if it's content rather than `,`/`:`/`}`/`]`/`#`/
+        // newline/EOF, it's a trailing-content error (yaml-test-suite
+        // Q4CL: `"quoted2" trailing content`).
+        {
+            let mut offset = 0isize;
+            while matches!(self.peek_char(offset), Some(' ' | '\t')) {
+                offset += 1;
+            }
+            let next = self.peek_char(offset);
+            let ok = match next {
+                None => true,
+                Some(c) => matches!(c, ',' | ':' | '}' | ']' | '#' | '\n' | '\r'),
+            };
+            if !ok {
+                return Err(Error::scan(
+                    self.position,
+                    format!("Unexpected `{}` after quoted scalar", next.unwrap_or(' ')),
+                ));
+            }
+        }
+
         Ok(Token::new(
             TokenType::Scalar(value, quote_style),
             start_pos,

@@ -2245,18 +2245,29 @@ impl BasicScanner {
         Ok((chomping, explicit_indent))
     }
 
-    /// Skip whitespace and comments to the next content line
+    /// Advance the cursor PAST the next line break, but do not consume
+    /// any leading whitespace on the line that follows. The block-
+    /// scalar header parser uses this to step from the indicator line
+    /// to the start of the content line — the next line's leading
+    /// spaces are part of its content_indent, not header whitespace.
     fn skip_to_next_line(&mut self) -> Result<()> {
+        // If we're already at column 1 (the comment handler in
+        // scan_block_scalar_header may have already advanced past a
+        // newline), do nothing — the next line's leading whitespace
+        // belongs to its content_indent.
+        if self.position.column == 1 {
+            return Ok(());
+        }
         while let Some(ch) = self.current_char {
             match ch {
                 '\n' | '\r' => {
                     self.advance();
-                    break;
+                    return Ok(());
                 }
                 ' ' | '\t' => {
                     self.advance();
                 }
-                _ => break,
+                _ => return Ok(()),
             }
         }
         Ok(())
@@ -2301,12 +2312,16 @@ impl BasicScanner {
                     continue;
                 }
                 Some(_) => {
-                    // If we're nested inside another block (i.e. the
-                    // indent stack has at least one entry above the
-                    // root) and this candidate line is not strictly
-                    // deeper than base_indent, it's a sibling outside
-                    // the scalar's scope (yaml-test-suite K858).
-                    let inside_block = self.indent_stack.len() > 1;
+                    // If we're nested inside another block — either
+                    // via the `indent_stack` (normal mapping/sequence
+                    // open) or `compact_sequence_indents` (a
+                    // compact block sequence at the same indent as
+                    // its parent) — and this candidate line is not
+                    // strictly deeper than base_indent, it's a
+                    // sibling outside the scalar's scope (yaml-test-
+                    // suite K858, P2AD).
+                    let inside_block = self.indent_stack.len() > 1
+                        || !self.compact_sequence_indents.is_empty();
                     if inside_block && line_indent <= base_indent {
                         content_indent = max_blank_indent.max(base_indent + 1);
                     } else {

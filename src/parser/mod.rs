@@ -447,15 +447,27 @@ impl BasicParser {
             }
 
             TokenType::DocumentEnd => {
+                // Same empty-doc fixup as in DocumentStart/StreamEnd:
+                // `---\n...` needs an implicit empty scalar.
+                if matches!(
+                    self.events.last().map(|e| &e.event_type),
+                    Some(EventType::DocumentStart { .. })
+                ) {
+                    self.events.push(Event::scalar(
+                        token.start_position,
+                        None,
+                        None,
+                        String::new(),
+                        true,
+                        false,
+                        ScalarStyle::Plain,
+                    ));
+                }
                 self.events
                     .push(Event::document_end(token.start_position, false));
                 // YAML 1.2: after `...`, the stream may continue with
                 // either another `---`, more directives, or implicit
-                // document content. Transition into the
-                // ImplicitDocumentStart state so subsequent content
-                // tokens correctly open the next document (yaml-test-
-                // suite 7Z25). Directive handlers also accept
-                // `ImplicitDocumentStart`, so that path stays open.
+                // document content.
                 self.state = ParserState::ImplicitDocumentStart;
             }
 

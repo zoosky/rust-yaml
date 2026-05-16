@@ -64,8 +64,15 @@ fn apply_chomping(mut s: String, mode: ChompingMode) -> String {
             s
         }
         ChompingMode::Clip => {
-            while s.ends_with("\n\n") {
+            // Strip trailing newlines. If anything remains, restore one.
+            // §8.1.1.2: clip keeps the final line break only when the
+            // scalar has actual content (yaml-test-suite K858: an empty
+            // clip scalar `>` is `""`, not `"\n"`).
+            while s.ends_with('\n') {
                 s.pop();
+            }
+            if !s.is_empty() {
+                s.push('\n');
             }
             s
         }

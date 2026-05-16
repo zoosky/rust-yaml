@@ -420,7 +420,8 @@ impl BasicParser {
                 // Close any open document. A document is "open" in every
                 // state except: not-yet-started (StreamStart /
                 // ImplicitDocumentStart), or already closed (DocumentEnd /
-                // StreamEnd).
+                // StreamEnd). If still open, also flush any unclosed
+                // block collections first.
                 if !matches!(
                     self.state,
                     ParserState::StreamStart
@@ -428,6 +429,7 @@ impl BasicParser {
                         | ParserState::DocumentEnd
                         | ParserState::StreamEnd
                 ) {
+                    close_open_collections(&mut self.events, token.start_position);
                     self.events
                         .push(Event::document_end(token.start_position, true));
                 }

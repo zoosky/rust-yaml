@@ -289,16 +289,79 @@ prod: *base
         assert!(folded_scalar.is_some(), "Should find folded scalar");
 
         if let EventType::Scalar { value, .. } = &folded_scalar.unwrap().event_type {
-            // Folded scalars should have spaces instead of newlines
-            assert!(
-                !value.contains('\n'),
-                "Folded scalar should not preserve newlines"
-            );
+            // Folded scalars fold internal line breaks into spaces, but
+            // clip-mode chomping (the default) keeps exactly one trailing
+            // line break per YAML 1.2 §8.1.1.2.
             assert!(
                 value.contains("This text will be folded into a single line"),
                 "Should fold the text"
             );
+            assert!(
+                value.ends_with('\n'),
+                "Clip-mode folded scalar keeps one trailing newline"
+            );
+            assert_eq!(
+                value.matches('\n').count(),
+                1,
+                "Internal line breaks must be folded, only one trailing newline allowed"
+            );
         }
+    }
+
+    fn parse_scalar_value(yaml: &str) -> String {
+        let mut parser = BasicParser::new_eager(yaml.to_string());
+        let mut events = Vec::new();
+        while parser.check_event() {
+            if let Ok(Some(event)) = parser.get_event() {
+                events.push(event);
+            } else {
+                break;
+            }
+        }
+        for ev in &events {
+            if let EventType::Scalar { value, style, .. } = &ev.event_type {
+                if matches!(style, ScalarStyle::Literal | ScalarStyle::Folded) {
+                    return value.clone();
+                }
+            }
+        }
+        panic!("No block scalar found in events");
+    }
+
+    #[test]
+    fn test_literal_clip_default_keeps_single_trailing_newline() {
+        let yaml = "|\n  ab\n";
+        assert_eq!(parse_scalar_value(yaml), "ab\n");
+    }
+
+    #[test]
+    fn test_literal_strip_removes_trailing_newlines() {
+        let yaml = "|-\n  ab\n";
+        assert_eq!(parse_scalar_value(yaml), "ab");
+    }
+
+    #[test]
+    fn test_literal_keep_preserves_trailing_blank_lines() {
+        let yaml = "|+\n  ab\n\n\n";
+        assert_eq!(parse_scalar_value(yaml), "ab\n\n\n");
+    }
+
+    #[test]
+    fn test_literal_strip_removes_multiple_trailing_newlines() {
+        let yaml = "|-\n  ab\n\n\n";
+        assert_eq!(parse_scalar_value(yaml), "ab");
+    }
+
+    #[test]
+    fn test_folded_clip_default_keeps_single_trailing_newline() {
+        let yaml = ">\n  ab\n  cd\n";
+        assert_eq!(parse_scalar_value(yaml), "ab cd\n");
+    }
+
+    #[test]
+    fn test_folded_strip_removes_trailing_newlines() {
+        let yaml = ">-\n  ab\n";
+        assert_eq!(parse_scalar_value(yaml), "ab");
     }
 
     #[test]

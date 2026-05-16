@@ -33,6 +33,45 @@ pub trait Scanner {
     fn input(&self) -> &str;
 }
 
+/// Block-scalar chomping mode per YAML 1.2 §8.1.1.2.
+///
+/// - `Strip` (`-`): drop the final line break and trailing empty lines.
+/// - `Clip` (default): keep exactly one final line break, drop trailing empty lines.
+/// - `Keep` (`+`): preserve the final line break and all trailing empty lines.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ChompingMode {
+    Strip,
+    Clip,
+    Keep,
+}
+
+/// Apply chomping mode to a block-scalar tail.
+///
+/// The collectors emit a `\n` for every line (content or blank). This helper
+/// trims that tail according to spec §8.1.1.2:
+///
+/// - **Strip:** remove every trailing `\n`.
+/// - **Clip:** keep exactly one trailing `\n` if content exists; drop the rest.
+///   Empty input stays empty.
+/// - **Keep:** preserve everything.
+fn apply_chomping(mut s: String, mode: ChompingMode) -> String {
+    match mode {
+        ChompingMode::Keep => s,
+        ChompingMode::Strip => {
+            while s.ends_with('\n') {
+                s.pop();
+            }
+            s
+        }
+        ChompingMode::Clip => {
+            while s.ends_with("\n\n") {
+                s.pop();
+            }
+            s
+        }
+    }
+}
+
 /// A basic scanner implementation for YAML tokenization
 #[derive(Debug)]
 #[allow(dead_code)]
@@ -2034,7 +2073,7 @@ impl BasicScanner {
         self.advance(); // Skip '|'
 
         // Parse block scalar header (indicators like +, -, explicit indent)
-        let (keep_trailing, explicit_indent) = self.scan_block_scalar_header()?;
+        let (chomping, explicit_indent) = self.scan_block_scalar_header()?;
 
         // Skip to next line
         self.skip_to_next_line()?;
@@ -2049,7 +2088,7 @@ impl BasicScanner {
         };
 
         // Collect the literal block content
-        let content = self.collect_literal_block_content(content_indent, keep_trailing)?;
+        let content = self.collect_literal_block_content(content_indent, chomping)?;
 
         Ok(Token::new(
             TokenType::BlockScalarLiteral(content),
@@ -2064,7 +2103,7 @@ impl BasicScanner {
         self.advance(); // Skip '>'
 
         // Parse block scalar header (indicators like +, -, explicit indent)
-        let (keep_trailing, explicit_indent) = self.scan_block_scalar_header()?;
+        let (chomping, explicit_indent) = self.scan_block_scalar_header()?;
 
         // Skip to next line
         self.skip_to_next_line()?;
@@ -2079,7 +2118,7 @@ impl BasicScanner {
         };
 
         // Collect the folded block content
-        let content = self.collect_folded_block_content(content_indent, keep_trailing)?;
+        let content = self.collect_folded_block_content(content_indent, chomping)?;
 
         Ok(Token::new(
             TokenType::BlockScalarFolded(content),
@@ -2089,19 +2128,19 @@ impl BasicScanner {
     }
 
     /// Parse block scalar header indicators (+, -, and explicit indent)
-    fn scan_block_scalar_header(&mut self) -> Result<(bool, Option<usize>)> {
-        let mut keep_trailing = false;
+    fn scan_block_scalar_header(&mut self) -> Result<(ChompingMode, Option<usize>)> {
+        let mut chomping = ChompingMode::Clip;
         let mut explicit_indent: Option<usize> = None;
 
         // Parse indicators in any order
         while let Some(ch) = self.current_char {
             match ch {
                 '+' => {
-                    keep_trailing = true;
+                    chomping = ChompingMode::Keep;
                     self.advance();
                 }
                 '-' => {
-                    keep_trailing = false; // Strip trailing newlines
+                    chomping = ChompingMode::Strip;
                     self.advance();
                 }
                 '0'..='9' => {
@@ -2147,7 +2186,7 @@ impl BasicScanner {
             }
         }
 
-        Ok((keep_trailing, explicit_indent))
+        Ok((chomping, explicit_indent))
     }
 
     /// Skip whitespace and comments to the next content line
@@ -2167,33 +2206,53 @@ impl BasicScanner {
         Ok(())
     }
 
-    /// Find the content indentation for a block scalar
+    /// Find the content indentation for a block scalar.
+    ///
+    /// The cursor is positioned at the start of the first content line
+    /// (caller has already consumed the header's terminating newline via
+    /// `skip_to_next_line`). Per spec §8.1.1.1: indent = leading spaces on
+    /// the first non-empty line; if none, the longest leading-space count.
     fn find_block_scalar_indent(&mut self, base_indent: usize) -> Result<usize> {
         let saved_position = self.position;
         let saved_char = self.current_char;
         let saved_char_index = self.current_char_index;
 
-        let mut content_indent = base_indent + 1; // Default minimum indent
+        let mut max_blank_indent = base_indent;
+        let mut found = false;
+        let mut content_indent = base_indent + 1;
 
-        // Look ahead to find the first non-empty line
-        while let Some(ch) = self.current_char {
-            self.advance();
-            if ch == '\n' || ch == '\r' {
-                let line_indent = self.count_line_indent();
+        // Walk lines without mutating long-term state. We restore at the end.
+        loop {
+            // Count leading spaces on the current line.
+            let mut line_indent = 0;
+            while let Some(' ') = self.current_char {
+                line_indent += 1;
+                self.advance();
+            }
 
-                // If this line has content (not just whitespace)
-                if let Some(line_ch) = self.current_char {
-                    if line_ch != '\n' && line_ch != '\r' {
-                        if line_indent > base_indent {
-                            content_indent = line_indent;
-                            break;
-                        }
-                        // Content must be indented more than the block scalar indicator
-                        content_indent = base_indent + 1;
-                        break;
+            match self.current_char {
+                None => break,
+                Some('\n') | Some('\r') => {
+                    if line_indent > max_blank_indent {
+                        max_blank_indent = line_indent;
                     }
+                    self.advance();
+                    continue;
+                }
+                Some(_) => {
+                    if line_indent > base_indent {
+                        content_indent = line_indent;
+                    } else {
+                        content_indent = base_indent + 1;
+                    }
+                    found = true;
+                    break;
                 }
             }
+        }
+
+        if !found && max_blank_indent > base_indent {
+            content_indent = max_blank_indent;
         }
 
         // Restore position
@@ -2231,26 +2290,57 @@ impl BasicScanner {
         indent
     }
 
-    /// Collect content for a literal block scalar
+    /// Collect content for a literal block scalar.
+    ///
+    /// Each line is preserved with its terminating newline. After collection
+    /// we apply the chomping mode per spec §8.1.1.2.
     fn collect_literal_block_content(
         &mut self,
         content_indent: usize,
-        _keep_trailing: bool,
+        chomping: ChompingMode,
     ) -> Result<String> {
         let mut content = String::new();
 
-        while let Some(_) = self.current_char {
-            let line_indent = self.count_line_indent();
-
-            // Skip indentation
-            for _ in 0..content_indent.min(line_indent) {
-                if let Some(' ' | '\t') = self.current_char {
-                    self.advance();
-                }
+        loop {
+            // Count current line's leading-space indent.
+            let mut line_indent = 0;
+            let save_pos = self.position;
+            let save_ch = self.current_char;
+            let save_idx = self.current_char_index;
+            while let Some(' ') = self.current_char {
+                line_indent += 1;
+                self.advance();
             }
 
-            // Collect line content
+            let line_is_blank = matches!(self.current_char, Some('\n') | Some('\r') | None);
+
+            if !line_is_blank && line_indent < content_indent {
+                // Non-empty line with less indent ends the scalar; rewind.
+                self.position = save_pos;
+                self.current_char = save_ch;
+                self.current_char_index = save_idx;
+                break;
+            }
+
+            if line_is_blank {
+                // Empty line only counts when there's an actual line break
+                // to consume. EOF after the previous line's `\n` is not a
+                // phantom trailing blank.
+                if matches!(self.current_char, Some('\n') | Some('\r')) {
+                    content.push('\n');
+                    self.advance();
+                    continue;
+                }
+                break;
+            }
+
+            // Content line: we already consumed `line_indent` spaces, but
+            // only `content_indent` of them belong to indentation. Any
+            // extra leading spaces are literal content.
             let mut line = String::new();
+            for _ in content_indent..line_indent {
+                line.push(' ');
+            }
             while let Some(ch) = self.current_char {
                 if ch == '\n' || ch == '\r' {
                     self.advance();
@@ -2259,89 +2349,153 @@ impl BasicScanner {
                 line.push(ch);
                 self.advance();
             }
-
-            // Check if we've reached the end of the block scalar
-            if line_indent < content_indent && !line.trim().is_empty() {
-                // This line is part of the next construct
-                break;
-            }
-
-            // Add line to content (preserving literal newlines)
             content.push_str(&line);
-            if self.current_char.is_some() {
-                content.push('\n');
-            }
+            content.push('\n');
 
-            // Check for end of input or document boundaries
             if self.current_char.is_none() {
                 break;
             }
         }
 
-        Ok(content)
+        Ok(apply_chomping(content, chomping))
     }
 
-    /// Collect content for a folded block scalar
+    /// Collect content for a folded block scalar.
+    ///
+    /// Folding rules (§8.1.3): a sequence of single blank lines between
+    /// equally-indented non-empty content lines collapses into a single
+    /// space; runs of blank lines emit `n-1` newlines; more-indented
+    /// lines preserve their newline boundaries. After collection, apply
+    /// chomping (§8.1.1.2).
     fn collect_folded_block_content(
         &mut self,
         content_indent: usize,
-        _keep_trailing: bool,
+        chomping: ChompingMode,
     ) -> Result<String> {
-        let mut content = String::new();
-        let mut prev_was_empty = false;
-        let mut first_line = true;
+        #[derive(Clone, Copy, PartialEq, Eq)]
+        enum LineKind {
+            Normal,
+            MoreIndented,
+            Empty,
+        }
+        struct Line {
+            text: String,
+            kind: LineKind,
+        }
 
-        while let Some(_) = self.current_char {
-            let line_indent = self.count_line_indent();
+        let mut lines: Vec<Line> = Vec::new();
 
-            // Skip indentation
-            for _ in 0..content_indent.min(line_indent) {
-                if let Some(' ' | '\t') = self.current_char {
-                    self.advance();
-                }
+        loop {
+            let mut line_indent = 0;
+            let save_pos = self.position;
+            let save_ch = self.current_char;
+            let save_idx = self.current_char_index;
+            while let Some(' ') = self.current_char {
+                line_indent += 1;
+                self.advance();
             }
 
-            // Collect line content
-            let mut line = String::new();
+            let line_is_blank = matches!(self.current_char, Some('\n') | Some('\r') | None);
+
+            if !line_is_blank && line_indent < content_indent {
+                self.position = save_pos;
+                self.current_char = save_ch;
+                self.current_char_index = save_idx;
+                break;
+            }
+
+            if line_is_blank {
+                if matches!(self.current_char, Some('\n') | Some('\r')) {
+                    lines.push(Line {
+                        text: String::new(),
+                        kind: LineKind::Empty,
+                    });
+                    self.advance();
+                    continue;
+                }
+                break;
+            }
+
+            // Capture extra-indent leading spaces as part of content.
+            let mut text = String::new();
+            for _ in content_indent..line_indent {
+                text.push(' ');
+            }
             while let Some(ch) = self.current_char {
                 if ch == '\n' || ch == '\r' {
                     self.advance();
                     break;
                 }
-                line.push(ch);
+                text.push(ch);
                 self.advance();
             }
-
-            // Check if we've reached the end of the block scalar
-            if line_indent < content_indent && !line.trim().is_empty() {
-                break;
-            }
-
-            let line_is_empty = line.trim().is_empty();
-
-            if line_is_empty {
-                // Empty lines are preserved as-is
-                if !first_line && !prev_was_empty {
-                    content.push('\n');
-                }
-                prev_was_empty = true;
+            let kind = if text.starts_with(' ') {
+                LineKind::MoreIndented
             } else {
-                // Non-empty lines are folded (joined with spaces)
-                if !first_line && !prev_was_empty {
-                    content.push(' '); // Fold previous line break into space
-                }
-                content.push_str(line.trim());
-                prev_was_empty = false;
-            }
-
-            first_line = false;
+                LineKind::Normal
+            };
+            lines.push(Line { text, kind });
 
             if self.current_char.is_none() {
                 break;
             }
         }
 
-        Ok(content)
+        // Build the folded output.
+        let mut content = String::new();
+        let mut idx = 0;
+        while idx < lines.len() {
+            let line = &lines[idx];
+            match line.kind {
+                LineKind::Normal | LineKind::MoreIndented => {
+                    content.push_str(&line.text);
+                    // Lookahead: count immediately-following empty lines.
+                    let mut j = idx + 1;
+                    let mut empties = 0;
+                    while j < lines.len() && lines[j].kind == LineKind::Empty {
+                        empties += 1;
+                        j += 1;
+                    }
+                    if j < lines.len() {
+                        // Another content line follows. Fold rule:
+                        // - 0 empties between Normal lines → space.
+                        // - 0 empties around a MoreIndented line → newline.
+                        // - k empties → k newlines.
+                        if empties == 0 {
+                            if line.kind == LineKind::MoreIndented
+                                || lines[j].kind == LineKind::MoreIndented
+                            {
+                                content.push('\n');
+                            } else {
+                                content.push(' ');
+                            }
+                        } else {
+                            for _ in 0..empties {
+                                content.push('\n');
+                            }
+                        }
+                        idx = j;
+                    } else {
+                        // End of stream after content (possibly trailing empties).
+                        // Always emit final `\n` for the last content line; extra
+                        // trailing empties contribute additional `\n`s, and chomping
+                        // will trim them later if needed.
+                        content.push('\n');
+                        for _ in 0..empties {
+                            content.push('\n');
+                        }
+                        break;
+                    }
+                }
+                LineKind::Empty => {
+                    // Leading empty lines (no preceding content): emit as `\n`s.
+                    content.push('\n');
+                    idx += 1;
+                }
+            }
+        }
+
+        Ok(apply_chomping(content, chomping))
     }
 
     /// Check if the current position is the start of a mapping key by looking ahead for ':'

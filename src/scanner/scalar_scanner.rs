@@ -326,8 +326,10 @@ impl ScalarScanner for super::BasicScanner {
         // Join lines with newlines (literal style preserves line breaks)
         let mut value = lines.join("\n");
 
-        // Apply chomping rules
-        if !keep_chomping {
+        // `scan_block_scalar_header` resolves to the inherent impl
+        // (returning ChompingMode); this trait impl is dead code, but
+        // we keep it compilable.
+        if matches!(keep_chomping, super::ChompingMode::Strip) {
             value = value.trim_end_matches('\n').to_string();
         }
 
@@ -425,8 +427,10 @@ impl ScalarScanner for super::BasicScanner {
             }
         }
 
-        // Apply chomping rules
-        if !keep_chomping {
+        // `scan_block_scalar_header` resolves to the inherent impl
+        // (returning ChompingMode); this trait impl is dead code, but
+        // we keep it compilable.
+        if matches!(keep_chomping, super::ChompingMode::Strip) {
             value = value.trim_end_matches('\n').to_string();
         }
 

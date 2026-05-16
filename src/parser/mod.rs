@@ -1377,6 +1377,30 @@ impl BasicParser {
                     ParserState::FlowMappingKey => {
                         self.state = ParserState::FlowMappingValue;
                     }
+                    ParserState::FlowSequence => {
+                        // §7.5: `[ : value ]` — leading `:` with no
+                        // preceding scalar implies an empty key for an
+                        // implicit single-pair flow mapping
+                        // (yaml-test-suite CFD4).
+                        self.state_stack.push(self.state);
+                        self.events.push(Event::mapping_start(
+                            token.start_position,
+                            None,
+                            None,
+                            true,
+                        ));
+                        self.events.push(Event::scalar(
+                            token.start_position,
+                            None,
+                            None,
+                            String::new(),
+                            true,
+                            false,
+                            ScalarStyle::Plain,
+                        ));
+                        self.state = ParserState::FlowMappingValue;
+                        self.implicit_flow_pair_depth += 1;
+                    }
                     _ => {}
                 }
             }

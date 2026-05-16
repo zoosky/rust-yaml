@@ -881,7 +881,14 @@ impl BasicParser {
                     ));
                 }
 
-                // Save block context state so we can restore it after the flow collection
+                // Save the enclosing state so we can restore it
+                // after the flow collection closes. The save list
+                // includes any state that can legitimately contain a
+                // flow node — block contexts AND flow-mapping
+                // key/value positions (yaml-test-suite SBG9
+                // \`{a: [b,c], [d,e]: f}\` — without FlowMappingValue
+                // in this list, state_stack pop'd None and we fell
+                // through to DocumentContent).
                 if matches!(
                     self.state,
                     ParserState::BlockMappingValue
@@ -889,6 +896,8 @@ impl BasicParser {
                         | ParserState::BlockSequence
                         | ParserState::FlowSequence
                         | ParserState::FlowMapping
+                        | ParserState::FlowMappingKey
+                        | ParserState::FlowMappingValue
                 ) {
                     self.state_stack.push(self.state);
                 }
@@ -912,7 +921,14 @@ impl BasicParser {
                     ));
                 }
 
-                // Save block context state so we can restore it after the flow collection
+                // Save the enclosing state so we can restore it
+                // after the flow collection closes. The save list
+                // includes any state that can legitimately contain a
+                // flow node — block contexts AND flow-mapping
+                // key/value positions (yaml-test-suite SBG9
+                // \`{a: [b,c], [d,e]: f}\` — without FlowMappingValue
+                // in this list, state_stack pop'd None and we fell
+                // through to DocumentContent).
                 if matches!(
                     self.state,
                     ParserState::BlockMappingValue
@@ -920,6 +936,8 @@ impl BasicParser {
                         | ParserState::BlockSequence
                         | ParserState::FlowSequence
                         | ParserState::FlowMapping
+                        | ParserState::FlowMappingKey
+                        | ParserState::FlowMappingValue
                 ) {
                     self.state_stack.push(self.state);
                 }

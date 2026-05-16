@@ -2535,7 +2535,10 @@ impl BasicScanner {
                 text.push(ch);
                 self.advance();
             }
-            let kind = if text.starts_with(' ') {
+            // §8.1.3.2: "more indented" means the content (after the
+            // common indent strip) begins with extra whitespace —
+            // either spaces or tabs (yaml-test-suite MJS9).
+            let kind = if text.starts_with(' ') || text.starts_with('\t') {
                 LineKind::MoreIndented
             } else {
                 LineKind::Normal

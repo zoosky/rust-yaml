@@ -4,9 +4,9 @@ on:
   push:
     branches: [main]
     paths:
-      - 'src/**'
-      - 'Cargo.toml'
-      - '.github/workflows/docs.yml'
+      - "src/**"
+      - "Cargo.toml"
+      - ".github/workflows/docs.yml"
   workflow_dispatch:
 
 permissions:
@@ -66,7 +66,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v5
         with:
-          path: 'target/doc'
+          path: "target/doc"
 
   deploy:
     name: Deploy to GitHub Pages

@@ -12,14 +12,14 @@ repos:
     hooks:
       # File and content checks
       - id: check-added-large-files
-        args: ['--maxkb=1000']  # Prevent files larger than 1MB
+        args: ["--maxkb=1000"] # Prevent files larger than 1MB
       - id: check-case-conflict
       - id: check-executables-have-shebangs
       - id: check-merge-conflict
       - id: check-symlinks
       - id: check-toml
       - id: check-yaml
-        args: ['--allow-multiple-documents']
+        args: ["--allow-multiple-documents"]
       - id: check-json
 
       # Security and sensitive data
@@ -31,9 +31,9 @@ repos:
       # Text formatting and consistency
       - id: end-of-file-fixer
       - id: trailing-whitespace
-        args: ['--markdown-linebreak-ext=md']
+        args: ["--markdown-linebreak-ext=md"]
       - id: mixed-line-ending
-        args: ['--fix=lf']
+        args: ["--fix=lf"]
 
       # Git best practices
       - id: forbid-new-submodules
@@ -91,7 +91,7 @@ repos:
         files: \.rs$
         pass_filenames: false
         description: "Run Rust library tests with 30s timeout (non-blocking)"
-        stages: [manual]  # Only run when explicitly requested
+        stages: [manual] # Only run when explicitly requested
 
       # Rust documentation check
       - id: rust-doc
@@ -164,7 +164,7 @@ repos:
         files: \.rs$
         pass_filenames: false
         description: "Ensure minimum 80% code coverage"
-        stages: [manual]  # Only run when explicitly requested
+        stages: [manual] # Only run when explicitly requested
 
   # ==============================================================================
   # Documentation and Markdown
@@ -175,7 +175,7 @@ repos:
     hooks:
       - id: markdownlint
         name: Markdown Lint
-        args: ['--fix', '--config', '.markdownlint.json']
+        args: ["--fix", "--config", ".markdownlint.json"]
         description: "Lint and fix Markdown files"
 
   - repo: local
@@ -200,11 +200,26 @@ repos:
         name: Conventional Commit
         description: "Ensure commit messages follow conventional commit format"
         stages: [commit-msg]
-        args: [
-          "build", "chore", "ci", "docs", "feat", "fix", "perf",
-          "refactor", "revert", "style", "test", "init", "update",
-          "deps", "release", "security", "config"
-        ]
+        args:
+          [
+            "build",
+            "chore",
+            "ci",
+            "docs",
+            "feat",
+            "fix",
+            "perf",
+            "refactor",
+            "revert",
+            "style",
+            "test",
+            "init",
+            "update",
+            "deps",
+            "release",
+            "security",
+            "config",
+          ]
 
   # ==============================================================================
   # Configuration and Infrastructure Files
@@ -239,7 +254,7 @@ repos:
     hooks:
       - id: detect-secrets
         name: Detect Secrets
-        args: ['--baseline', '.secrets.baseline']
+        args: ["--baseline", ".secrets.baseline"]
         description: "Detect secrets and credentials in code"
 
   - repo: local
@@ -263,7 +278,7 @@ repos:
 fail_fast: true
 
 # Minimum pre-commit version
-minimum_pre_commit_version: '3.0.0'
+minimum_pre_commit_version: "3.0.0"
 
 # Default language version (if needed)
 default_language_version:
@@ -279,7 +294,7 @@ ci:
 
     for more information, see https://pre-commit.ci
   autofix_prs: true
-  autoupdate_branch: ''
-  autoupdate_commit_msg: '[pre-commit.ci] pre-commit autoupdate'
+  autoupdate_branch: ""
+  autoupdate_commit_msg: "[pre-commit.ci] pre-commit autoupdate"
   autoupdate_schedule: weekly
-  skip: [rust-test, rust-coverage, rust-audit]  # Skip resource-intensive hooks in CI
+  skip: [rust-test, rust-coverage, rust-audit] # Skip resource-intensive hooks in CI

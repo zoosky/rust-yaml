@@ -2,12 +2,12 @@ name: bot-setup
 author: Elio Severo Junior <elioseverojunior@gmail.com>
 description: bot-setup
 runs:
-  using: 'composite'
+  using: "composite"
   steps:
     - name: GitHub Actions Bot Configuration
       id: bot_config
       env:
-        GITHUB_BOT_EMAIL: 'github-actions[bot]@users.noreply.github.com'
+        GITHUB_BOT_EMAIL: "github-actions[bot]@users.noreply.github.com"
         GITHUB_BOT_USERNAME: "github-actions[bot]"
       shell: bash -l {0}
       run: |

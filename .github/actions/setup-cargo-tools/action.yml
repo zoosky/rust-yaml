@@ -1,17 +1,17 @@
-name: 'Setup Cargo Tools Cache'
-description: 'Setup caching for cargo tools like cargo-audit, cargo-llvm-cov, etc.'
+name: "Setup Cargo Tools Cache"
+description: "Setup caching for cargo tools like cargo-audit, cargo-llvm-cov, etc."
 inputs:
   tools:
-    description: 'Space-separated list of tools to install and cache'
+    description: "Space-separated list of tools to install and cache"
     required: true
-    default: ''
+    default: ""
   arch:
-    description: 'Architecture (x86_64, aarch64, etc.)'
+    description: "Architecture (x86_64, aarch64, etc.)"
     required: false
-    default: 'x86_64'
+    default: "x86_64"
 
 runs:
-  using: 'composite'
+  using: "composite"
   steps:
     - name: Detect architecture
       id: detect-arch

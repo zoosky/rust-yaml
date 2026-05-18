@@ -20,11 +20,13 @@ Before publishing, ensure the following secrets are configured in your GitHub re
 ### Required Permissions
 
 Ensure GitHub Actions has the following permissions:
+
 - **Contents**: Write (for creating releases and tags)
 - **Pages**: Write (for publishing documentation to GitHub Pages)
 - **Pull Requests**: Write (for automated PRs if needed)
 
 Go to: Settings → Actions → General → Workflow permissions
+
 - Select "Read and write permissions"
 
 ## Publishing Methods
@@ -105,6 +107,7 @@ gh release create v0.1.0 --generate-notes
 Documentation is automatically built by docs.rs when you publish to crates.io.
 
 Configuration in `Cargo.toml`:
+
 ```toml
 [package.metadata.docs.rs]
 rustdoc-args = [
@@ -139,6 +142,7 @@ Follow semantic versioning (https://semver.org/):
 ### Pre-release Versions
 
 For pre-releases, use:
+
 - Alpha: `0.1.0-alpha.1`
 - Beta: `0.1.0-beta.1`
 - Release Candidate: `0.1.0-rc.1`
@@ -151,13 +155,15 @@ For pre-releases, use:
 
 ### Issue: "Invalid CARGO_REGISTRY_TOKEN"
 
-**Solution**: 
+**Solution**:
+
 1. Generate a new token at https://crates.io/me
 2. Update the secret in GitHub repository settings
 
 ### Issue: "Package verification failed"
 
 **Solution**: Run locally to debug:
+
 ```bash
 cargo package --verbose
 cargo publish --dry-run
@@ -165,7 +171,8 @@ cargo publish --dry-run
 
 ### Issue: "Documentation not appearing on docs.rs"
 
-**Solution**: 
+**Solution**:
+
 1. Check build status at: https://docs.rs/crate/rust-yaml/builds
 2. Ensure your `Cargo.toml` has valid metadata
 3. Check for build errors in the docs.rs build log
@@ -192,6 +199,7 @@ cargo publish --dry-run
 ## Support
 
 For issues with publishing:
+
 1. Check GitHub Actions logs
 2. Review docs.rs build logs
 3. Open an issue in the repository

@@ -7,7 +7,7 @@ This document outlines the caching strategy implemented for optimal CI/CD perfor
 Our caching strategy focuses on three main areas:
 
 1. **Rust toolchain caching** - Cache rustup installations
-2. **Cargo dependency caching** - Cache downloaded crates and git repositories  
+2. **Cargo dependency caching** - Cache downloaded crates and git repositories
 3. **Build artifact caching** - Cache compiled target directories with smart fallbacks
 4. **Tool caching** - Cache installed cargo tools like cargo-audit, cargo-llvm-cov
 
@@ -19,7 +19,7 @@ Our caching strategy focuses on three main areas:
 - **Paths**: `~/.cargo/registry/index`, `~/.cargo/registry/cache`, `~/.cargo/git/db`
 - **Fallback**: `{OS}-cargo-registry-`
 
-### Build Cache  
+### Build Cache
 
 - **Key**: `{OS}-cargo-{suffix}-{toolchain}-{Cargo.lock hash}-{source hash}`
 - **Paths**: `target/`
@@ -47,7 +47,7 @@ Reusable action for Rust project caching with inputs:
 - `toolchain`: Rust version (default: stable)
 - `cache-target`: Whether to cache target directory (default: true)
 
-### setup-cargo-tools  
+### setup-cargo-tools
 
 Reusable action for cargo tools with inputs:
 
@@ -82,7 +82,7 @@ Reusable action for cargo tools with inputs:
 
 ### Benchmarks
 
-- Registry cache (shared)  
+- Registry cache (shared)
 - Build cache including benchmark source files
 - Separate from other caches due to different optimization profile
 

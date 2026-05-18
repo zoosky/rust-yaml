@@ -13,11 +13,11 @@
 - [ ] 💥 Breaking change (fix or feature that causes existing functionality to change)
 - [ ] 📚 Documentation update
 - [ ] 🎨 Code style/formatting change
-- [ ] ♻️  Refactoring (no functional changes)
+- [ ] ♻️ Refactoring (no functional changes)
 - [ ] ⚡ Performance improvement
 - [ ] ✅ Test addition or improvement
 - [ ] 🔧 Build/CI configuration change
-- [ ] 🏷️  Type definition update
+- [ ] 🏷️ Type definition update
 
 ## Related Issues
 
@@ -218,8 +218,6 @@ cargo fmt -- --check
 <!-- Any specific questions you have for reviewers -->
 
 -
--
+- ***
 
----
-
-**Thank you for contributing to rust-yaml! 🎉**
+  **Thank you for contributing to rust-yaml! 🎉**

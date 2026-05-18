@@ -1,14 +1,14 @@
 workflow: GitHubFlow/v1
 assembly-versioning-scheme: MajorMinorPatch
 assembly-file-versioning-scheme: MajorMinorPatchTag
-tag-prefix: '[vV]'
+tag-prefix: "[vV]"
 version-in-branch-pattern: (?<version>[vV]?\d+(\.\d+)?(\.\d+)?).*
 major-version-bump-message: '\+semver:\s?(breaking|major)'
 minor-version-bump-message: '\+semver:\s?(feature|minor)'
 patch-version-bump-message: '\+semver:\s?(fix|patch)'
 no-bump-message: '\+semver:\s?(none|skip)'
 tag-pre-release-weight: 60000
-commit-date-format: 'yyyy-MM-dd'
+commit-date-format: "yyyy-MM-dd"
 update-build-number: true
 semantic-version-format: Loose
 commit-message-incrementing: Enabled
@@ -20,7 +20,7 @@ strategies:
   - VersionInBranchName
 branches:
   main:
-    label: ''
+    label: ""
     increment: Patch
     prevent-increment:
       of-merged-branch: true
@@ -28,7 +28,7 @@ branches:
       when-current-commit-tagged: true
     track-merge-target: false
     track-merge-message: true
-    regex: '^main$|^master$'
+    regex: "^main$|^master$"
     source-branches: []
     is-source-branch-for: []
     tracks-release-branches: false
@@ -37,7 +37,7 @@ branches:
     pre-release-weight: 55000
   release:
     mode: ManualDeployment
-    label: 'beta'
+    label: "beta"
     increment: None
     prevent-increment:
       of-merged-branch: true
@@ -45,7 +45,7 @@ branches:
       when-current-commit-tagged: true
     track-merge-target: false
     track-merge-message: true
-    regex: '^releases?[/-](?<BranchName>.+)'
+    regex: "^releases?[/-](?<BranchName>.+)"
     source-branches:
       - main
     is-source-branch-for: []
@@ -55,12 +55,12 @@ branches:
     pre-release-weight: 1000
   feature:
     mode: ManualDeployment
-    label: '{BranchName}'
+    label: "{BranchName}"
     increment: Inherit
     prevent-increment:
       when-current-commit-tagged: false
     track-merge-message: true
-    regex: '^features?[/-](?<BranchName>.+)'
+    regex: "^features?[/-](?<BranchName>.+)"
     source-branches:
       - main
       - release
@@ -69,7 +69,7 @@ branches:
     pre-release-weight: 30000
   pull-request:
     mode: ContinuousDelivery
-    label: 'PullRequest'
+    label: "PullRequest"
     increment: Inherit
     prevent-increment:
       of-merged-branch: true
@@ -84,12 +84,12 @@ branches:
     pre-release-weight: 30000
   unknown:
     mode: ManualDeployment
-    label: '{BranchName}'
+    label: "{BranchName}"
     increment: Inherit
     prevent-increment:
       when-current-commit-tagged: false
     track-merge-message: false
-    regex: '(?<BranchName>.+)'
+    regex: "(?<BranchName>.+)"
     source-branches:
       - main
       - release

@@ -1,21 +1,21 @@
-name: 'Setup Rust Cache'
-description: 'Setup optimized caching for Rust projects'
+name: "Setup Rust Cache"
+description: "Setup optimized caching for Rust projects"
 inputs:
   cache-key-suffix:
-    description: 'Additional suffix for cache key specificity'
+    description: "Additional suffix for cache key specificity"
     required: false
-    default: ''
+    default: ""
   toolchain:
-    description: 'Rust toolchain version'
+    description: "Rust toolchain version"
     required: false
-    default: 'stable'
+    default: "stable"
   cache-target:
-    description: 'Whether to cache target directory'
+    description: "Whether to cache target directory"
     required: false
-    default: 'true'
+    default: "true"
 
 runs:
-  using: 'composite'
+  using: "composite"
   steps:
     - name: Cache Rust toolchain
       if: inputs.toolchain != 'stable'

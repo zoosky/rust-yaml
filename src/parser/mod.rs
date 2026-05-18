@@ -1536,8 +1536,8 @@ impl BasicParser {
 
             TokenType::FlowEntry => {
                 // YAML 1.2 §7.4: a `,` must follow an entry. Leading
-                // `,` (e.g. `[ , a, b ]`) and double `,, ` are invalid
-                // (yaml-test-suite 9MAG).
+                // `,` (e.g. `[ , a, b ]`) and consecutive `,, ` are
+                // invalid (yaml-test-suite 9MAG, CTN5).
                 let no_prior_entry = matches!(
                     self.events.last().map(|e| &e.event_type),
                     Some(EventType::SequenceStart { flow_style: true, .. })
@@ -1547,6 +1547,15 @@ impl BasicParser {
                     return Err(Error::parse(
                         token.start_position,
                         "Flow entry separator `,` with no preceding entry",
+                    ));
+                }
+                // Consecutive `,` — last_token_type carries the kind of
+                // the previous token. If it's also FlowEntry, no entry
+                // came between (e.g. `[a, , b]`, `[a, b, , ]`).
+                if matches!(self.last_token_type, Some(TokenType::FlowEntry)) {
+                    return Err(Error::parse(
+                        token.start_position,
+                        "Consecutive `,` separators in flow collection",
                     ));
                 }
                 // §7.5: inside a flow mapping, a comma terminates the
@@ -1850,8 +1859,12 @@ impl Default for BasicParser {
 
 impl Parser for BasicParser {
     fn check_event(&self) -> bool {
-        // For streaming: check if we have cached events or can generate more
-        self.event_index < self.events.len() || self.scanner.check_token()
+        // For streaming: check if we have cached events, can generate
+        // more, or a deferred error is waiting to be surfaced (from
+        // eager parsing).
+        self.event_index < self.events.len()
+            || self.scanner.check_token()
+            || self.scanning_error.is_some()
     }
 
     fn peek_event(&self) -> Result<Option<&Event>> {
@@ -1877,6 +1890,13 @@ impl Parser for BasicParser {
             let event = self.events[self.event_index].clone();
             self.event_index += 1;
             Ok(Some(event))
+        } else if let Some(error) = self.scanning_error.take() {
+            // Eager-parse and scanner errors are stored in
+            // `scanning_error` (see `new_eager`). Surface them through
+            // the natural iteration path *after* all buffered events
+            // have been drained, so callers see the partial events
+            // first and then the error that terminated parsing.
+            Err(error)
         } else {
             Ok(None)
         }

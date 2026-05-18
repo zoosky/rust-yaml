@@ -507,6 +507,27 @@ prod: *base
         );
     }
 
+    /// YAML 1.2 §7.4: consecutive `,` separators in a flow collection
+    /// (e.g. `[a, , b]`, `[a, b, , ]`) are invalid — every comma must
+    /// terminate a preceding entry. yaml-test-suite CTN5.
+    #[test]
+    fn test_double_comma_in_flow_seq_errors() {
+        let yaml = "---\n[ a, b, c, , ]\n";
+        let mut parser = BasicParser::new_eager(yaml.to_string());
+        let mut saw_error = false;
+        while parser.check_event() {
+            match parser.get_event() {
+                Ok(Some(_)) => {}
+                Ok(None) => break,
+                Err(_) => {
+                    saw_error = true;
+                    break;
+                }
+            }
+        }
+        assert!(saw_error, "Expected error on [a, b, c, , ]");
+    }
+
     /// A block-entry marker `-` without a following item denotes an
     /// implicit empty scalar item. Two `- ` markers in a row mean the
     /// first item is empty, and a single `-` followed by EOF/BlockEnd

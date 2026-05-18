@@ -1771,6 +1771,65 @@ impl BasicScanner {
                             )
                         )) =>
                 {
+                    // §8.22: an implicit key in block context must fit
+                    // on a single line. If the previous token is a
+                    // flow-collection close whose matching open is on
+                    // a different line, the flow node spans multiple
+                    // lines and can't serve as the key (yaml-test-
+                    // suite C2SP \`[23\\n]: 42\`).
+                    if self.flow_level == 0 {
+                        let mut is_flow_close = false;
+                        let mut close_end_line = 0;
+                        if let Some(last) = self.tokens.last() {
+                            if matches!(
+                                last.token_type,
+                                TokenType::FlowSequenceEnd | TokenType::FlowMappingEnd
+                            ) {
+                                is_flow_close = true;
+                                close_end_line = last.end_position.line;
+                            }
+                        }
+                        if is_flow_close {
+                            let mut depth = 0i32;
+                            let mut open_idx: Option<usize> = None;
+                            for (idx, t) in self.tokens.iter().enumerate().rev() {
+                                match &t.token_type {
+                                    TokenType::FlowSequenceEnd
+                                    | TokenType::FlowMappingEnd => {
+                                        depth += 1;
+                                    }
+                                    TokenType::FlowSequenceStart
+                                    | TokenType::FlowMappingStart => {
+                                        depth -= 1;
+                                        if depth == 0 {
+                                            open_idx = Some(idx);
+                                            break;
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            if let Some(oi) = open_idx {
+                                let open_line = self.tokens[oi].start_position.line;
+                                // If a `?` (Key) token precedes the
+                                // matching flow open on the same line
+                                // as the key, the key is explicit and
+                                // may span lines (yaml-test-suite M5DY
+                                // \`? [ ...spans... ]: [ ... ]\`).
+                                let key_marker_before = self.tokens[..oi].iter().rev().any(|t| {
+                                    matches!(t.token_type, TokenType::Key)
+                                        && t.start_position.line == open_line
+                                });
+                                if !key_marker_before && open_line != close_end_line {
+                                    return Err(Error::scan(
+                                        self.position,
+                                        "Implicit key in block context: flow collection key spans multiple lines"
+                                            .to_string(),
+                                    ));
+                                }
+                            }
+                        }
+                    }
                     let pos = self.position;
                     self.advance();
                     self.tokens

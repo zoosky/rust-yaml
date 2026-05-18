@@ -191,6 +191,11 @@ pub struct BasicParser {
     state_stack: Vec<ParserState>,
     position: Position,
     pending_anchor: Option<String>,
+    /// Line where `pending_anchor` was set. Used to distinguish a
+    /// "freestanding" anchor (alone on its own line — belongs to the
+    /// upcoming collection) from an "inline" anchor (same line as the
+    /// next key — belongs to that key). yaml-test-suite 6BFJ, 9KAX.
+    pending_anchor_line: Option<usize>,
     pending_tag: Option<String>,
     last_token_type: Option<TokenType>,
     scanning_error: Option<Error>,
@@ -259,6 +264,7 @@ impl BasicParser {
             state_stack: Vec::new(),
             position,
             pending_anchor: None,
+            pending_anchor_line: None,
             pending_tag: None,
             last_token_type: None,
             scanning_error: None,
@@ -293,6 +299,7 @@ impl BasicParser {
             state_stack: Vec::new(),
             position,
             pending_anchor: None,
+            pending_anchor_line: None,
             pending_tag: None,
             last_token_type: None,
             scanning_error: None,
@@ -329,6 +336,7 @@ impl BasicParser {
             state_stack: Vec::new(),
             position,
             pending_anchor: None,
+            pending_anchor_line: None,
             pending_tag: None,
             last_token_type: None,
             scanning_error: None,
@@ -812,16 +820,23 @@ impl BasicParser {
 
                     // If the BlockMappingStart wraps an implicit key
                     // at the document root and the next token is the
-                    // key scalar, any pending anchor/tag belongs to
-                    // that key — not to the surrounding mapping
-                    // (yaml-test-suite ZH7C, E76Z, 74H7). For mappings
-                    // nested in a value or sequence position the
-                    // anchor was placed in the value slot and DOES
-                    // attach to the mapping itself.
+                    // key scalar on the SAME line as the pending
+                    // anchor/tag, those properties belong to the key —
+                    // not to the surrounding mapping (yaml-test-suite
+                    // ZH7C, E76Z, 74H7). For mappings nested in a value
+                    // or sequence position, or when the anchor is
+                    // "freestanding" on a previous line, the anchor
+                    // attaches to the mapping itself (yaml-test-suite
+                    // 6BFJ, 9KAX).
                     let in_value_position = matches!(
                         self.state,
                         ParserState::BlockMappingValue | ParserState::BlockSequence
                     );
+                    let next_token_line = self
+                        .scanner
+                        .peek_token()
+                        .ok()
+                        .and_then(|t| t.map(|tt| tt.start_position.line));
                     let next_is_scalar = matches!(
                         self.scanner.peek_token(),
                         Ok(Some(t)) if matches!(
@@ -829,11 +844,17 @@ impl BasicParser {
                             TokenType::Scalar(..) | TokenType::Anchor(_) | TokenType::Tag(_)
                         )
                     );
-                    let (anchor, tag) = if !in_value_position && next_is_scalar {
-                        (None, None)
-                    } else {
-                        (self.pending_anchor.take(), self.pending_tag.take())
-                    };
+                    let anchor_same_line_as_key = matches!(
+                        (self.pending_anchor_line, next_token_line),
+                        (Some(a), Some(k)) if a == k
+                    );
+                    let (anchor, tag) =
+                        if !in_value_position && next_is_scalar && anchor_same_line_as_key {
+                            (None, None)
+                        } else {
+                            self.pending_anchor_line = None;
+                            (self.pending_anchor.take(), self.pending_tag.take())
+                        };
                     self.events.push(Event::mapping_start(
                         token.start_position,
                         anchor,
@@ -1625,6 +1646,7 @@ impl BasicParser {
                 // references).
                 self.defined_anchors.insert(name.clone());
                 self.pending_anchor = Some(name.clone());
+                self.pending_anchor_line = Some(token.start_position.line);
             }
 
             TokenType::Alias(name) => {

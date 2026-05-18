@@ -507,6 +507,42 @@ prod: *base
         );
     }
 
+    /// An anchor on its own line (no key immediately after on the same
+    /// line) belongs to the surrounding collection, not to a key. So
+    /// for `&m\n&k a: b`, &m attaches to the outer mapping and &k to
+    /// the inner key. yaml-test-suite 6BFJ, 9KAX.
+    #[test]
+    fn test_freestanding_anchor_attaches_to_collection() {
+        let yaml = "---\n&m\n&k a: b\n";
+        let mut parser = BasicParser::new_eager(yaml.to_string());
+        let mut events = Vec::new();
+        while parser.check_event() {
+            match parser.get_event() {
+                Ok(Some(event)) => events.push(event),
+                Ok(None) => break,
+                Err(e) => panic!("parser error: {e:?}"),
+            }
+        }
+        let map_anchor = events.iter().find_map(|e| match &e.event_type {
+            EventType::MappingStart { anchor, .. } => Some(anchor.clone()),
+            _ => None,
+        });
+        assert_eq!(
+            map_anchor,
+            Some(Some("m".to_string())),
+            "expected outer map anchor=Some(m); got {map_anchor:?}"
+        );
+        let key_a = events.iter().find_map(|e| match &e.event_type {
+            EventType::Scalar { value, anchor, .. } if value == "a" => Some(anchor.clone()),
+            _ => None,
+        });
+        assert_eq!(
+            key_a,
+            Some(Some("k".to_string())),
+            "expected key 'a' anchor=Some(k); got {key_a:?}"
+        );
+    }
+
     /// YAML 1.2 §7.4: consecutive `,` separators in a flow collection
     /// (e.g. `[a, , b]`, `[a, b, , ]`) are invalid — every comma must
     /// terminate a preceding entry. yaml-test-suite CTN5.

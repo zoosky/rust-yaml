@@ -26,7 +26,7 @@ key2: value2
     let result = yaml.load_str(input).unwrap();
     println!("Test 1 result: {:?}", result);
 
-    if let Value::Mapping(ref map) = result {
+    if let Value::Mapping(map) = result {
         assert_eq!(
             map.get(&Value::String("key1".to_string())),
             Some(&Value::Sequence(vec![])),
@@ -53,7 +53,7 @@ key2: value2
     let result = yaml.load_str(input).unwrap();
     println!("Test 2 result: {:?}", result);
 
-    if let Value::Mapping(ref map) = result {
+    if let Value::Mapping(map) = result {
         assert_eq!(map.len(), 2, "should have exactly 2 keys");
         assert!(
             map.contains_key(&Value::String("key2".to_string())),
@@ -79,9 +79,9 @@ parent:
     let result = yaml.load_str(input).unwrap();
     println!("Test 3 result: {:?}", result);
 
-    if let Value::Mapping(ref map) = result {
+    if let Value::Mapping(map) = result {
         let parent = map.get(&Value::String("parent".to_string())).unwrap();
-        if let Value::Mapping(ref inner) = parent {
+        if let Value::Mapping(inner) = parent {
             assert_eq!(inner.len(), 2, "parent should have 2 children");
             assert_eq!(
                 inner.get(&Value::String("child1".to_string())),
@@ -109,7 +109,7 @@ key2: value2
     let result = yaml.load_str(input).unwrap();
     println!("Test 4 result: {:?}", result);
 
-    if let Value::Mapping(ref map) = result {
+    if let Value::Mapping(map) = result {
         assert_eq!(map.len(), 2, "should have exactly 2 keys");
         assert!(
             map.contains_key(&Value::String("key1".to_string())),
@@ -137,7 +137,7 @@ spec:
     let result = yaml.load_str(input).unwrap();
     println!("Test 5 result: {:?}", result);
 
-    if let Value::Mapping(ref map) = result {
+    if let Value::Mapping(map) = result {
         assert_eq!(map.len(), 2, "should have metadata and spec");
         assert!(
             map.contains_key(&Value::String("metadata".to_string())),
@@ -149,7 +149,7 @@ spec:
         );
 
         // Verify spec structure
-        if let Some(Value::Mapping(ref spec)) = map.get(&Value::String("spec".to_string())) {
+        if let Some(Value::Mapping(spec)) = map.get(&Value::String("spec".to_string())) {
             assert_eq!(
                 spec.get(&Value::String("replicas".to_string())),
                 Some(&Value::Int(3)),
@@ -174,7 +174,7 @@ d: normal
     let result = yaml.load_str(input).unwrap();
     println!("Test 6 result: {:?}", result);
 
-    if let Value::Mapping(ref map) = result {
+    if let Value::Mapping(map) = result {
         assert_eq!(map.len(), 4, "should have 4 keys");
         assert_eq!(
             map.get(&Value::String("d".to_string())),
@@ -436,7 +436,7 @@ fn test_plain_scalar_with_suffix() {
     let input = "cpu: 500m\nmemory: 512Mi\n";
     let parsed = yaml.load_str(input).unwrap();
 
-    if let Value::Mapping(ref map) = parsed {
+    if let Value::Mapping(map) = parsed {
         assert_eq!(
             map.get(&Value::String("cpu".to_string())),
             Some(&Value::String("500m".to_string())),
@@ -469,11 +469,11 @@ resources:
 "#;
     let parsed = yaml.load_str(input).unwrap();
 
-    if let Value::Mapping(ref root) = parsed {
+    if let Value::Mapping(root) = parsed {
         let resources = root.get(&Value::String("resources".to_string())).unwrap();
-        if let Value::Mapping(ref res) = resources {
+        if let Value::Mapping(res) = resources {
             let requests = res.get(&Value::String("requests".to_string())).unwrap();
-            if let Value::Mapping(ref req) = requests {
+            if let Value::Mapping(req) = requests {
                 assert_eq!(
                     req.get(&Value::String("cpu".to_string())),
                     Some(&Value::String("100m".to_string())),
@@ -554,11 +554,11 @@ requirements:
 "#;
     let parsed = yaml.load_str(input).unwrap();
 
-    if let Value::Mapping(ref root) = parsed {
+    if let Value::Mapping(root) = parsed {
         let req = root
             .get(&Value::String("requirements".to_string()))
             .unwrap();
-        if let Value::Sequence(ref seq) = req {
+        if let Value::Sequence(seq) = req {
             assert_eq!(
                 seq.len(),
                 3,
@@ -580,9 +580,9 @@ fn test_simple_block_sequence() {
     let input = "items:\n  - a: 1\n  - b: 2\n  - c: 3\n";
     let parsed = yaml.load_str(input).unwrap();
 
-    if let Value::Mapping(ref root) = parsed {
+    if let Value::Mapping(root) = parsed {
         let items = root.get(&Value::String("items".to_string())).unwrap();
-        if let Value::Sequence(ref seq) = items {
+        if let Value::Sequence(seq) = items {
             assert_eq!(
                 seq.len(),
                 3,

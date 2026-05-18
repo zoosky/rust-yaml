@@ -1977,6 +1977,40 @@ impl BasicScanner {
                                     .to_string(),
                             ));
                         }
+                        // §8.22: a block sequence's first \`-\` must
+                        // begin on a new line. \`key: - a\` (implicit
+                        // key, then dash on same line) is invalid
+                        // (yaml-test-suite 5U3A). But \`? key\\n: - x\`
+                        // (explicit value-separator on the same line
+                        // as the dash) IS valid: the \`?\` key sits
+                        // on a previous line. We distinguish by
+                        // walking back from the Value: if the
+                        // preceding non-property token is a Scalar
+                        // on the same line as the Value, the key
+                        // is implicit; otherwise it's after \`?\`.
+                        if matches!(last.token_type, TokenType::Value)
+                            && last.end_position.line == self.position.line
+                        {
+                            let value_line = last.start_position.line;
+                            let mut prior_scalar_line = None;
+                            for t in self.tokens.iter().rev().skip(1) {
+                                match &t.token_type {
+                                    TokenType::Anchor(_) | TokenType::Tag(_) => continue,
+                                    TokenType::Scalar(..) => {
+                                        prior_scalar_line = Some(t.end_position.line);
+                                        break;
+                                    }
+                                    _ => break,
+                                }
+                            }
+                            if prior_scalar_line == Some(value_line) {
+                                return Err(Error::scan(
+                                    self.position,
+                                    "Block sequence value cannot start on the same line as its key"
+                                        .to_string(),
+                                ));
+                            }
+                        }
                     }
                     let pos = self.position;
                     self.advance();

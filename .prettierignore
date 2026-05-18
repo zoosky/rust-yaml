@@ -1,0 +1,50 @@
+# Rust artifacts — managed by cargo / rustfmt
+target/
+Cargo.lock
+*.rs
+*.toml
+
+# yaml-test-suite — conformance fixtures must remain byte-exact
+yaml-test-suite/data/
+target/yaml-test-suite-failures.txt
+
+# Build & dependency caches
+node_modules/
+dist/
+build/
+.next/
+coverage/
+
+# Editor & OS junk
+.git/
+.idea/
+.vscode/
+.DS_Store
+*.swp
+*.swo
+*~
+
+# Generated / vendored content
+*.lock
+*.lockb
+LICENSE-*
+SECURITY-DOC*.md
+
+# Snapshot/binary outputs we shouldn't reformat
+*.snap
+*.bin
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.ico
+*.webp
+*.pdf
+*.zip
+*.tar.gz
+*.tgz
+
+# Misc
+.envrc
+.env
+.env.*

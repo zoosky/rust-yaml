@@ -2181,7 +2181,28 @@ impl BasicScanner {
 
                 // Tags. Same line-start property-opens-mapping rule
                 // (yaml-test-suite ZH7C variants).
+                //
+                // §6.9: a property at the SAME indent as the
+                // enclosing mapping/sequence cannot apply to that
+                // collection's value — the value must be more
+                // indented. If we're at a line-start \`!\` whose column
+                // equals the enclosing mapping's indent + 1 AND that
+                // mapping currently has a key awaiting a value, the
+                // tag is misplaced (yaml-test-suite H7J7).
                 '!' => {
+                    if self.flow_level == 0
+                        && self.position.column == self.current_indent + 1
+                        && !self.check_for_mapping_ahead()
+                        && self.indent_stack.len() > 1
+                        && self.current_indent == self.indent_stack[self.indent_stack.len() - 2]
+                        && self.most_recent_token_is_value_separator()
+                    {
+                        return Err(Error::scan(
+                            self.position,
+                            "Tag at line-start with insufficient indent for value position"
+                                .to_string(),
+                        ));
+                    }
                     if self.flow_level == 0
                         && self.position.column == self.current_indent + 1
                         && self.check_for_mapping_ahead()
@@ -3140,6 +3161,20 @@ impl BasicScanner {
     /// are scanned past (including `''` and `\"` escapes) before looking
     /// for the `: ` that would make this scalar a key. This handles
     /// yaml-test-suite 6H3V (`'foo: bar\': baz'`) and 6SLA.
+    /// Walk back through recent tokens; if the last non-property
+    /// token was `Value` (`:`), the parser is in value-expectation
+    /// mode (key not yet matched with a value).
+    fn most_recent_token_is_value_separator(&self) -> bool {
+        for t in self.tokens.iter().rev() {
+            match t.token_type {
+                TokenType::Anchor(_) | TokenType::Tag(_) => continue,
+                TokenType::Value => return true,
+                _ => return false,
+            }
+        }
+        false
+    }
+
     fn check_for_mapping_ahead(&self) -> bool {
         let mut i = self.current_char_index;
         let n = self.char_cache.len();

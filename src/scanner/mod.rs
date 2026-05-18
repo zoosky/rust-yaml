@@ -309,7 +309,15 @@ impl BasicScanner {
                     .char_cache
                     .get(i)
                     .map_or(false, |c| !matches!(c, '\n' | '\r'));
-                if has_content {
+                // A line that begins with the matching flow closer
+                // (\`]\` / \`}\`) is allowed at the parent indent — it
+                // closes the flow collection, not adds content
+                // (yaml-test-suite NKF9 trailing-line \`}\` at col 1).
+                let is_closer = matches!(
+                    self.char_cache.get(i).copied(),
+                    Some(']' | '}')
+                );
+                if has_content && !is_closer {
                     let parent_indent = self.indent_stack.last().copied().unwrap_or(0);
                     if probe <= parent_indent {
                         return Err(Error::scan(

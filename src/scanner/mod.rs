@@ -1691,8 +1691,15 @@ impl BasicScanner {
                         // We have a nested sequence on the same line!
                         // Track this as an inline sequence
                         self.inline_sequence_depth += 1;
-                        // Also push to indent_stack to track proper nesting
-                        self.indent_stack.push(self.position.column);
+                        // Push the *indent* (column - 1), not the
+                        // column, so it matches the convention used by
+                        // maybe_open_block_mapping_for_key. With column
+                        // here the next-line indent (column - 1) would
+                        // be strictly less than the stored value and
+                        // wrongly trigger an early close, breaking
+                        // multi-line nested sequences (yaml-test-suite
+                        // 3ALJ, 57H4).
+                        self.indent_stack.push(self.position.column.saturating_sub(1));
                         self.indent_is_sequence.push(true);
                         // Check depth limit
                         self.resource_tracker
@@ -1846,17 +1853,16 @@ impl BasicScanner {
             }
         }
 
-        // After processing the line, close any inline sequences
-        while self.inline_sequence_depth > 0 {
-            self.inline_sequence_depth -= 1;
-            // Also pop from indent_stack
-            if self.indent_stack.len() > 1 {
-                self.indent_stack.pop();
-                self.indent_is_sequence.pop();
-            }
-            self.tokens
-                .push(Token::simple(TokenType::BlockEnd, self.position));
-        }
+        // Inline sequences (nested \`- -\` on one line) used to be
+        // closed unconditionally at end-of-line. But a nested sequence
+        // can span lines (`- - a\n  - b\n- c`) — in that case the inner
+        // sequence must remain open until handle_indentation sees a
+        // dedent. Reset the inline-sequence counter (so the next line
+        // is judged on its own merits) but DO NOT emit BlockEnd —
+        // handle_indentation's indent_stack pop, the end-of-stream
+        // close at scan_next_token, and the explicit-dedent close at
+        // handle_indentation's bottom each provide a correct close.
+        self.inline_sequence_depth = 0;
 
         Ok(())
     }

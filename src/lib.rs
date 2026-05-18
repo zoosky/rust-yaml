@@ -507,6 +507,43 @@ prod: *base
         );
     }
 
+    /// A nested block sequence (`- - x`) that continues on the next line
+    /// (`  - y`) should keep the inner sequence open. yaml-test-suite
+    /// 3ALJ, 57H4, 6BCT, W42U.
+    #[test]
+    fn test_nested_block_sequence_spans_lines() {
+        let yaml = "- - s1_i1\n  - s1_i2\n- s2\n";
+        let mut parser = BasicParser::new_eager(yaml.to_string());
+        let mut events = Vec::new();
+        while parser.check_event() {
+            match parser.get_event() {
+                Ok(Some(event)) => events.push(event),
+                Ok(None) => break,
+                Err(e) => panic!("parser error: {e:?}"),
+            }
+        }
+        let summary: Vec<String> = events
+            .iter()
+            .map(|e| match &e.event_type {
+                EventType::SequenceStart { .. } => "+SEQ".to_string(),
+                EventType::SequenceEnd => "-SEQ".to_string(),
+                EventType::Scalar { value, .. } => format!("=VAL :{value}"),
+                _ => String::new(),
+            })
+            .filter(|s| !s.is_empty())
+            .collect();
+        assert_eq!(
+            summary,
+            vec![
+                "+SEQ", "+SEQ",
+                "=VAL :s1_i1", "=VAL :s1_i2",
+                "-SEQ", "=VAL :s2",
+                "-SEQ",
+            ],
+            "Got: {summary:?}"
+        );
+    }
+
     /// An anchor on its own line (no key immediately after on the same
     /// line) belongs to the surrounding collection, not to a key. So
     /// for `&m\n&k a: b`, &m attaches to the outer mapping and &k to

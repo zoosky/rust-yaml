@@ -706,10 +706,18 @@ impl BasicParser {
                     self.events.push(event);
                 }
 
-                // If we're starting a sequence within a mapping context, push the current state
+                // If we're starting a sequence within a mapping or
+                // outer-sequence context, push the current state so the
+                // outer collection can be restored on close. Without
+                // BlockSequence in this list, a nested `- -` sequence's
+                // inner close falls through to DocumentContent and the
+                // next BlockEntry spuriously opens a fresh sequence
+                // (yaml-test-suite 3ALJ, 57H4).
                 if matches!(
                     self.state,
-                    ParserState::BlockMappingValue | ParserState::BlockMappingKey
+                    ParserState::BlockMappingValue
+                        | ParserState::BlockMappingKey
+                        | ParserState::BlockSequence
                 ) {
                     self.state_stack.push(self.state);
                 }

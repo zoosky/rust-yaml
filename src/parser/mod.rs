@@ -1271,9 +1271,20 @@ impl BasicParser {
                 // pending anchor/tag belongs to the KEY scalar, not
                 // to the synthesised mapping (yaml-test-suite QF4Y,
                 // L9U5, 87E4, 8UDB, 9MMW, LX3P, CN3R).
+                //
+                // §7.5 also says: an implicit key in flow context
+                // must be on a SINGLE LINE. If the \`:\` is on a
+                // different line from the key scalar, it's invalid
+                // (yaml-test-suite DK4H, ZXT5).
                 if matches!(self.state, ParserState::FlowSequence) {
                     if let Ok(Some(next_token)) = self.scanner.peek_token() {
                         if matches!(next_token.token_type, TokenType::Value) {
+                            if next_token.start_position.line != token.start_position.line {
+                                return Err(Error::parse(
+                                    next_token.start_position,
+                                    "Implicit key in flow context must be on a single line",
+                                ));
+                            }
                             self.state_stack.push(self.state);
                             self.events.push(Event::mapping_start(
                                 token.start_position,

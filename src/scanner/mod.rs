@@ -1705,6 +1705,26 @@ impl BasicScanner {
                     && (self.peek_char(1).map_or(true, |c| c.is_whitespace())
                         || self.peek_char(1).is_none()) =>
                 {
+                    // A block-entry \`-\` immediately after a flow
+                    // collection's close (\`}\`, \`]\`) ON THE SAME LINE
+                    // is invalid — no separator between the closed
+                    // flow node and the next sibling (yaml-test-suite
+                    // P2EQ \`- { y: z }- invalid\`). The same-line guard
+                    // is essential — a \`}\` on a previous line with a
+                    // new \`-\` on the next line is perfectly valid.
+                    if let Some(last) = self.tokens.last() {
+                        if matches!(
+                            last.token_type,
+                            TokenType::FlowMappingEnd | TokenType::FlowSequenceEnd
+                        ) && last.end_position.line == self.position.line
+                        {
+                            return Err(Error::scan(
+                                self.position,
+                                "Block-entry `-` immediately after flow collection close"
+                                    .to_string(),
+                            ));
+                        }
+                    }
                     let pos = self.position;
                     self.advance();
 

@@ -1658,11 +1658,20 @@ impl BasicScanner {
                         .push(Token::new(TokenType::Value, pos, self.position));
                 }
 
-                // Explicit key marker
+                // Explicit key marker. An indented `?` at line-start
+                // (e.g. `mapping:\\n  ? key`) opens an implicit block
+                // mapping at this column — same as a line-start scalar
+                // key. Without this, scan_plain_scalar wouldn't see
+                // the inner mapping's indent and would wrongly fold
+                // the key content into a multi-line scalar
+                // (yaml-test-suite S9E8, KK5P).
                 '?' if self.flow_level == 0
                     && (self.peek_char(1).map_or(true, |c| c.is_whitespace())
                         || self.peek_char(1).is_none()) =>
                 {
+                    if self.position.column == self.current_indent + 1 {
+                        self.maybe_open_block_mapping_for_key()?;
+                    }
                     let pos = self.position;
                     self.advance();
                     self.tokens

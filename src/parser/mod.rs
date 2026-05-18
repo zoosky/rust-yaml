@@ -200,6 +200,11 @@ pub struct BasicParser {
     /// an explicit-key construct has an inline single-pair mapping as
     /// its key (yaml-test-suite M2N8/00, M2N8/01, V9D5).
     last_key_marker_line: Option<usize>,
+    /// Column of the most recent \`?\` Key marker. Used in V9D5: when
+    /// a \`:\` arrives at the same column as the most recent \`?\` on
+    /// a later line, it's the explicit value separator — close any
+    /// inline-wrapped inner mapping first.
+    last_key_marker_column: Option<usize>,
     pending_tag: Option<String>,
     /// Same idea as `pending_anchor_line` but for tags. Used to detect
     /// a freestanding tag in block-sequence context that should be
@@ -275,6 +280,7 @@ impl BasicParser {
             pending_anchor: None,
             pending_anchor_line: None,
             last_key_marker_line: None,
+            last_key_marker_column: None,
             pending_tag: None,
             pending_tag_line: None,
             last_token_type: None,
@@ -312,6 +318,7 @@ impl BasicParser {
             pending_anchor: None,
             pending_anchor_line: None,
             last_key_marker_line: None,
+            last_key_marker_column: None,
             pending_tag: None,
             pending_tag_line: None,
             last_token_type: None,
@@ -351,6 +358,7 @@ impl BasicParser {
             pending_anchor: None,
             pending_anchor_line: None,
             last_key_marker_line: None,
+            last_key_marker_column: None,
             pending_tag: None,
             pending_tag_line: None,
             last_token_type: None,
@@ -1687,6 +1695,34 @@ impl BasicParser {
                         self.state = ParserState::BlockMappingValue;
                     }
                     ParserState::BlockMappingKey => {
+                        // §8.22 V9D5: when a `:` arrives at the same
+                        // column as the most recent `?` on a LATER
+                        // line, it's the explicit value separator of
+                        // that `?` key. If we previously wrapped an
+                        // inline single-pair mapping for the explicit
+                        // key (via the path below), close it first so
+                        // the outer mapping receives the value (yaml-
+                        // test-suite V9D5).
+                        if self
+                            .last_key_marker_column
+                            .map_or(false, |c| c == token.start_position.column)
+                            && self
+                                .last_key_marker_line
+                                .map_or(false, |l| l < token.start_position.line)
+                            && !self.state_stack.is_empty()
+                            && matches!(
+                                self.state_stack.last(),
+                                Some(ParserState::BlockMappingKey)
+                            )
+                        {
+                            // Close inline-wrapped key mapping if its
+                            // children are even (complete pairs).
+                            if !innermost_mapping_has_odd_children(&self.events) {
+                                self.events.push(Event::mapping_end(token.start_position));
+                                self.state = self.state_stack.pop().unwrap();
+                                self.last_key_marker_column = None;
+                            }
+                        }
                         // §8.22: when the explicit key marker (\`?\`) is
                         // followed by a node + \`:\` on the SAME line,
                         // that whole construct is an inline single-pair
@@ -2155,6 +2191,7 @@ impl BasicParser {
             TokenType::Key => {
                 self.explicit_key_pending = true;
                 self.last_key_marker_line = Some(token.start_position.line);
+                self.last_key_marker_column = Some(token.start_position.column);
                 match self.state {
                     ParserState::ImplicitDocumentStart => {
                         // Start implicit document and mapping

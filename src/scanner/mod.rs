@@ -1938,6 +1938,26 @@ impl BasicScanner {
 
                 // Plain scalars
                 _ if self.is_plain_scalar_start() => {
+                    // A plain scalar starting on the SAME line as a
+                    // flow-collection close (\`}\` or \`]\`) means there's
+                    // no separator between the closed flow node and
+                    // the new content (yaml-test-suite 62EZ
+                    // \`x: { y: z }in: valid\`).
+                    if self.flow_level == 0 {
+                        if let Some(last) = self.tokens.last() {
+                            if matches!(
+                                last.token_type,
+                                TokenType::FlowMappingEnd | TokenType::FlowSequenceEnd
+                            ) && last.end_position.line == self.position.line
+                            {
+                                return Err(Error::scan(
+                                    self.position,
+                                    "Plain scalar immediately after flow collection close"
+                                        .to_string(),
+                                ));
+                            }
+                        }
+                    }
                     if self.flow_level == 0 && self.check_for_mapping_ahead() {
                         self.maybe_open_block_mapping_for_key()?;
                     }

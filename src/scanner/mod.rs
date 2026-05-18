@@ -2140,6 +2140,21 @@ impl BasicScanner {
                 // *before* the property/alias token is emitted
                 // (yaml-test-suite 7BMT, 6BFJ, 9KAX, U3XV, 26DV).
                 '&' => {
+                    // Mirror H7J7 check for anchors (yaml-test-suite
+                    // G9HC \`seq:\\n&anchor\\n- a\`).
+                    if self.flow_level == 0
+                        && self.position.column == self.current_indent + 1
+                        && !self.check_for_mapping_ahead()
+                        && self.indent_stack.len() > 1
+                        && self.current_indent == self.indent_stack[self.indent_stack.len() - 2]
+                        && self.most_recent_token_is_value_separator()
+                    {
+                        return Err(Error::scan(
+                            self.position,
+                            "Anchor at line-start with insufficient indent for value position"
+                                .to_string(),
+                        ));
+                    }
                     if self.flow_level == 0
                         && self.position.column == self.current_indent + 1
                         && self.check_for_mapping_ahead()

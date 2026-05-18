@@ -455,8 +455,16 @@ impl BasicScanner {
                 }
             }
 
-            // Validate indentation consistency if we already have a detected style
-            self.validate_indentation_consistency(current_indent)?;
+            // YAML 1.2 §6.1 does NOT require all indents to be multiples
+            // of a single "indent width". Sibling lines must share a
+            // column and children must indent deeper than parents, but
+            // any positive amount works. The "multiple of N" check
+            // rejected valid spec fixtures (6HB6, M5C3, P94K, Q9WF,
+            // RZP5, UGM3, XW4D, A2M4); we rely on the indent_stack
+            // open/close logic for genuine mis-indentation. The detected
+            // style is still recorded for later style-preservation use
+            // (e.g. emitter), it just no longer drives validation.
+            // self.validate_indentation_consistency(current_indent)?;
         }
 
         Ok(())

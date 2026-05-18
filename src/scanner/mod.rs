@@ -421,6 +421,27 @@ impl BasicScanner {
                 context,
             ));
         }
+        // §6.1: indentation must be space characters only. Pure-tab
+        // indentation (\`\\tkey: value\`) is invalid (yaml-test-suite
+        // 4EJS). Two carve-outs:
+        //   * The mixed case is caught by the earlier branch.
+        //   * Tabs before a flow-collection opener (\`\\t[\`, \`\\t{\`)
+        //     at the root are not "block indentation" — there's no
+        //     enclosing block — and yaml-test-suite 6CA3 / Q5MG accept
+        //     them.
+        if has_tabs
+            && !has_spaces
+            && !matches!(self.current_char, Some('[' | '{'))
+        {
+            let context = crate::error::ErrorContext::from_input(&self.input, &self.position, 4)
+                .with_suggestion("Use space characters for indentation".to_string());
+            return Err(Error::invalid_character_with_context(
+                self.position,
+                '\t',
+                "indentation",
+                context,
+            ));
+        }
 
         // If we detected tabs, check for mixed indentation across lines
         if has_tabs {

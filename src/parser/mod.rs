@@ -196,6 +196,10 @@ pub struct BasicParser {
     /// upcoming collection) from an "inline" anchor (same line as the
     /// next key — belongs to that key). yaml-test-suite 6BFJ, 9KAX.
     pending_anchor_line: Option<usize>,
+    /// Line of the most recent \`?\` Key marker. Used to detect when
+    /// an explicit-key construct has an inline single-pair mapping as
+    /// its key (yaml-test-suite M2N8/00, M2N8/01, V9D5).
+    last_key_marker_line: Option<usize>,
     pending_tag: Option<String>,
     /// Same idea as `pending_anchor_line` but for tags. Used to detect
     /// a freestanding tag in block-sequence context that should be
@@ -270,6 +274,7 @@ impl BasicParser {
             position,
             pending_anchor: None,
             pending_anchor_line: None,
+            last_key_marker_line: None,
             pending_tag: None,
             pending_tag_line: None,
             last_token_type: None,
@@ -306,6 +311,7 @@ impl BasicParser {
             position,
             pending_anchor: None,
             pending_anchor_line: None,
+            last_key_marker_line: None,
             pending_tag: None,
             pending_tag_line: None,
             last_token_type: None,
@@ -344,6 +350,7 @@ impl BasicParser {
             position,
             pending_anchor: None,
             pending_anchor_line: None,
+            last_key_marker_line: None,
             pending_tag: None,
             pending_tag_line: None,
             last_token_type: None,
@@ -552,10 +559,31 @@ impl BasicParser {
                     && !self.explicit_key_pending
                     && innermost_mapping_has_odd_children(&self.events)
                 {
-                    return Err(Error::parse(
-                        token.start_position,
-                        "Mapping key not followed by `:`",
-                    ));
+                    // §8.22 carve-out: when the unmatched "key" is
+                    // actually a collection node (the inline-wrapped
+                    // explicit-key from yaml-test-suite M2N8 cluster),
+                    // synth an empty value rather than erroring — the
+                    // explicit-key construct allows omitted values.
+                    let key_was_collection = matches!(
+                        self.events.last().map(|e| &e.event_type),
+                        Some(EventType::MappingEnd) | Some(EventType::SequenceEnd)
+                    );
+                    if key_was_collection {
+                        self.events.push(Event::scalar(
+                            token.start_position,
+                            None,
+                            None,
+                            String::new(),
+                            true,
+                            false,
+                            ScalarStyle::Plain,
+                        ));
+                    } else {
+                        return Err(Error::parse(
+                            token.start_position,
+                            "Mapping key not followed by `:`",
+                        ));
+                    }
                 }
                 // YAML 1.2: an explicit `---` with NO body needs an
                 // implicit empty scalar as the doc's content (yaml-test-
@@ -1647,6 +1675,65 @@ impl BasicParser {
                         self.state = ParserState::BlockMappingValue;
                     }
                     ParserState::BlockMappingKey => {
+                        // §8.22: when the explicit key marker (\`?\`) is
+                        // followed by a node + \`:\` on the SAME line,
+                        // that whole construct is an inline single-pair
+                        // mapping (the explicit key node itself).
+                        // Wrap retroactively by inserting an inner
+                        // MappingStart before the just-emitted key
+                        // node. yaml-test-suite M2N8/00 \`- ? : x\`,
+                        // M2N8/01 \`? []: x\`.
+                        let odd_children =
+                            innermost_mapping_has_odd_children(&self.events);
+                        let key_marker_same_line = self
+                            .last_key_marker_line
+                            .map_or(false, |l| l == token.start_position.line);
+                        if odd_children && key_marker_same_line {
+                            // Find the most recent emitted KEY-position
+                            // node within the active mapping (it'll be
+                            // either a Scalar or a flow-collection
+                            // open). Insert MappingStart BEFORE it.
+                            let mut depth = 0i32;
+                            let mut insert_at = None;
+                            for (idx, ev) in self.events.iter().enumerate().rev() {
+                                match &ev.event_type {
+                                    EventType::MappingEnd | EventType::SequenceEnd => {
+                                        depth += 1;
+                                    }
+                                    EventType::MappingStart { .. }
+                                    | EventType::SequenceStart { .. } => {
+                                        if depth == 0 {
+                                            insert_at = Some(idx);
+                                            break;
+                                        }
+                                        depth -= 1;
+                                    }
+                                    EventType::Scalar { .. } if depth == 0 => {
+                                        insert_at = Some(idx);
+                                        break;
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            if let Some(ii) = insert_at {
+                                self.state_stack.push(self.state);
+                                self.events.insert(
+                                    ii,
+                                    Event::mapping_start(
+                                        self.events[ii].position,
+                                        None,
+                                        None,
+                                        false,
+                                    ),
+                                );
+                                // Reset key marker so it doesn't fire
+                                // again for a different pair.
+                                self.last_key_marker_line = None;
+                                self.state = ParserState::BlockMappingValue;
+                                self.last_token_type = token_type_for_tracking;
+                                return Ok(());
+                            }
+                        }
                         let even_children =
                             !innermost_mapping_has_odd_children(&self.events);
                         if even_children {
@@ -2029,6 +2116,7 @@ impl BasicParser {
             // Complex key marker
             TokenType::Key => {
                 self.explicit_key_pending = true;
+                self.last_key_marker_line = Some(token.start_position.line);
                 match self.state {
                     ParserState::ImplicitDocumentStart => {
                         // Start implicit document and mapping

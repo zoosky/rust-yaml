@@ -1771,6 +1771,20 @@ impl BasicScanner {
                             )
                         )) =>
                 {
+                    // §6.2: a \`:\` at line-start (the explicit-value
+                    // counterpart of an explicit \`?\` key) must be
+                    // followed by a SPACE — a tab as separator is
+                    // invalid (yaml-test-suite Y79Y/007, /009).
+                    if self.flow_level == 0
+                        && self.position.column == self.current_indent + 1
+                        && self.peek_char(1) == Some('\t')
+                    {
+                        return Err(Error::scan(
+                            self.position,
+                            "Tab cannot follow line-start `:` as explicit-value separator"
+                                .to_string(),
+                        ));
+                    }
                     // §8.22: an implicit key in block context must fit
                     // on a single line. If the previous token is a
                     // flow-collection close whose matching open is on

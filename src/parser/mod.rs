@@ -775,6 +775,20 @@ impl BasicParser {
                         "Document already contains a root node",
                     ));
                 }
+                // §9.1.1: an anchor on the \`---\` doc-start line cannot
+                // be followed by an implicit single-pair mapping —
+                // the anchor would have nowhere to attach (it's not
+                // the mapping itself, not the key). \`--- &anchor a: b\`
+                // is invalid (yaml-test-suite CXX2).
+                if matches!(self.state, ParserState::DocumentStart)
+                    && self.pending_anchor.is_some()
+                    && self.pending_anchor_line == Some(token.start_position.line)
+                {
+                    return Err(Error::parse(
+                        token.start_position,
+                        "Anchor on `---` doc-start line cannot precede an implicit mapping",
+                    ));
+                }
                 // Determine whether to create a new mapping or continue existing one
                 // This token is generated when we encounter a key at the start of a line with nested content
                 // It doesn't always mean we need to create a new mapping - sometimes we're just continuing

@@ -507,6 +507,45 @@ prod: *base
         );
     }
 
+    /// `top3: &node3\n  *alias1 : v` — `&node3` belongs to the inner
+    /// mapping; `*alias1` is the inner key (already-defined alias). The
+    /// parser must NOT raise "Alias may not have an anchor or tag".
+    /// yaml-test-suite 26DV.
+    #[test]
+    fn test_alias_key_inside_anchored_mapping_value() {
+        let yaml = "anc: &a v\nouter: &node3\n  *a : scalar3\n";
+        let mut parser = BasicParser::new_eager(yaml.to_string());
+        let mut events = Vec::new();
+        while parser.check_event() {
+            match parser.get_event() {
+                Ok(Some(event)) => events.push(event),
+                Ok(None) => break,
+                Err(e) => panic!("parser error: {e:?}"),
+            }
+        }
+        let mapping_anchors: Vec<Option<String>> = events
+            .iter()
+            .filter_map(|e| match &e.event_type {
+                EventType::MappingStart { anchor, .. } => Some(anchor.clone()),
+                _ => None,
+            })
+            .collect();
+        // outer mapping (no anchor), inner mapping with &node3
+        assert_eq!(
+            mapping_anchors,
+            vec![None, Some("node3".to_string())],
+            "expected [None, Some(node3)]; got {mapping_anchors:?}"
+        );
+        // Confirm an Alias event exists for *a as a key.
+        let alias_present = events
+            .iter()
+            .any(|e| matches!(&e.event_type, EventType::Alias { anchor } if anchor == "a"));
+        assert!(
+            alias_present,
+            "Expected Alias *a; events: {events:?}"
+        );
+    }
+
     /// A line beginning with `:` denotes a mapping entry with an implicit
     /// empty key. The parser must open a block mapping (if not already in
     /// one) and synthesise the empty key. yaml-test-suite case 2JQS.

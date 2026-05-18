@@ -2,25 +2,24 @@
 
 ## Security Comparison ✅ **ADVANTAGE: rust-yaml**
 
-| Attack Vector | rust-yaml | serde_yaml | yaml-rust | yaml-rust2 | serde_yml |
-|---------------|-----------|------------|-----------|------------|-----------|
-| Alias Depth Attacks | ✅ **Protected** | ❌ Vulnerable | ❌ Vulnerable | ❌ Vulnerable | ❌ Vulnerable |
-| Billion Laughs | ✅ **Protected** | ❌ Vulnerable | ❌ Vulnerable | ❌ Vulnerable | ❌ Vulnerable |
-| Deep Nesting | ✅ **Protected** | ⚠️ Limited | ⚠️ Limited | ⚠️ Limited | ⚠️ Limited |
-| Resource Limits | ✅ **Comprehensive** | ❌ None | ⚠️ Basic | ⚠️ Basic | ⚠️ Basic |
+| Attack Vector       | rust-yaml            | serde_yaml    | yaml-rust     | yaml-rust2    | serde_yml     |
+| ------------------- | -------------------- | ------------- | ------------- | ------------- | ------------- |
+| Alias Depth Attacks | ✅ **Protected**     | ❌ Vulnerable | ❌ Vulnerable | ❌ Vulnerable | ❌ Vulnerable |
+| Billion Laughs      | ✅ **Protected**     | ❌ Vulnerable | ❌ Vulnerable | ❌ Vulnerable | ❌ Vulnerable |
+| Deep Nesting        | ✅ **Protected**     | ⚠️ Limited    | ⚠️ Limited    | ⚠️ Limited    | ⚠️ Limited    |
+| Resource Limits     | ✅ **Comprehensive** | ❌ None       | ⚠️ Basic      | ⚠️ Basic      | ⚠️ Basic      |
 
 ### Example: Alias Depth Protection
 
 ```yaml
-
 # This attack creates 6-level deep nesting, blocked by rust-yaml
 
 a: &a "base"
-b: &b [*a]  # depth 2
-c: &c [*b]  # depth 3
-d: &d [*c]  # depth 4
-e: &e [*d]  # depth 5
-f: &f [*e]  # depth 6 ❌ BLOCKED!
+b: &b [*a] # depth 2
+c: &c [*b] # depth 3
+d: &d [*c] # depth 4
+e: &e [*d] # depth 5
+f: &f [*e] # depth 6 ❌ BLOCKED!
 test: *f
 ```
 
@@ -30,14 +29,14 @@ test: *f
 
 ## YAML 1.2 Specification Support ✅ **ADVANTAGE: rust-yaml**
 
-| Feature | rust-yaml | serde_yaml | yaml-rust | yaml-rust2 | serde_yml |
-|---------|-----------|------------|-----------|------------|-----------|
-| Tag Directives (%TAG, %YAML) | ✅ **Full** | ❌ Limited | ❌ Limited | ❌ Limited | ❌ Limited |
-| Explicit Type Tags (!!str, !!int) | ✅ **Complete** | ⚠️ Subset | ⚠️ Subset | ⚠️ Subset | ⚠️ Subset |
-| Binary Data (!!binary) | ✅ **Native** | ❌ No | ❌ No | ❌ No | ❌ No |
-| Complex Keys (Sequences/Mappings) | ✅ **Full** | ❌ No | ❌ No | ❌ No | ❌ No |
-| Complex Collections | ✅ **Full** | ⚠️ Limited | ⚠️ Limited | ⚠️ Limited | ⚠️ Limited |
-| Type Coercion | ✅ **Automatic** | ⚠️ Manual | ⚠️ Manual | ⚠️ Manual | ⚠️ Manual |
+| Feature                           | rust-yaml        | serde_yaml | yaml-rust  | yaml-rust2 | serde_yml  |
+| --------------------------------- | ---------------- | ---------- | ---------- | ---------- | ---------- |
+| Tag Directives (%TAG, %YAML)      | ✅ **Full**      | ❌ Limited | ❌ Limited | ❌ Limited | ❌ Limited |
+| Explicit Type Tags (!!str, !!int) | ✅ **Complete**  | ⚠️ Subset  | ⚠️ Subset  | ⚠️ Subset  | ⚠️ Subset  |
+| Binary Data (!!binary)            | ✅ **Native**    | ❌ No      | ❌ No      | ❌ No      | ❌ No      |
+| Complex Keys (Sequences/Mappings) | ✅ **Full**      | ❌ No      | ❌ No      | ❌ No      | ❌ No      |
+| Complex Collections               | ✅ **Full**      | ⚠️ Limited | ⚠️ Limited | ⚠️ Limited | ⚠️ Limited |
+| Type Coercion                     | ✅ **Automatic** | ⚠️ Manual  | ⚠️ Manual  | ⚠️ Manual  | ⚠️ Manual  |
 
 ### Example: Advanced YAML 1.2 Features
 
@@ -46,17 +45,15 @@ test: *f
 %TAG ! tag:example.com,2024:
 ---
 !!map
-string: !!str 123      # Forces string type
-integer: !!int "456"   # Forces int from string
-float: !!float "3.14"  # Forces float from string
-binary: !!binary |     # Base64 binary data
+string: !!str 123 # Forces string type
+integer: !!int "456" # Forces int from string
+float: !!float "3.14" # Forces float from string
+binary: !!binary | # Base64 binary data
   SGVsbG8gV29ybGQh
 
 # Complex keys - sequences and mappings as keys
-? [name, age]
-: [John, 30]
-? {first: Alice, last: Smith}
-: person_data
+[name, age]: [John, 30]
+{ first: Alice, last: Smith }: person_data
 ```
 
 **rust-yaml**: ✅ Parses perfectly with full type resolution and complex keys (5.1ms)
@@ -67,14 +64,14 @@ binary: !!binary |     # Base64 binary data
 
 Based on preliminary benchmarks:
 
-| Library | Parse Speed* | Memory Usage* | Features |
-|---------|-------------|---------------|----------|
-| **rust-yaml** | **45ms** | **12MB** | Full YAML 1.2 |
-| yaml-rust2 | 52ms | 18MB | Subset only |
-| serde_yml | 48ms | 15MB | Serde-focused |
-| serde_yaml | 50ms | 16MB | **Deprecated** |
+| Library       | Parse Speed\* | Memory Usage\* | Features       |
+| ------------- | ------------- | -------------- | -------------- |
+| **rust-yaml** | **45ms**      | **12MB**       | Full YAML 1.2  |
+| yaml-rust2    | 52ms          | 18MB           | Subset only    |
+| serde_yml     | 48ms          | 15MB           | Serde-focused  |
+| serde_yaml    | 50ms          | 16MB           | **Deprecated** |
 
-*_Parsing 1MB complex nested YAML document_
+\*_Parsing 1MB complex nested YAML document_
 
 ### Performance Features
 
@@ -124,13 +121,13 @@ let config = YamlConfig {
 
 ## Ecosystem Status 📊 **ADVANTAGE: rust-yaml**
 
-| Library | Status | Last Update | Vulnerabilities |
-|---------|--------|-------------|-----------------|
-| **rust-yaml** | ✅ **Active Development** | 2025-current | None known |
-| serde_yaml | ❌ **Deprecated** | 2024 (deprecated) | Unfixed issues |
-| yaml-rust | ⚠️ Maintenance only | 2021 | Known issues |
-| yaml-rust2 | ✅ Active | 2024 | Some issues |
-| serde_yml | ✅ Active | 2024 | Limited scope |
+| Library       | Status                    | Last Update       | Vulnerabilities |
+| ------------- | ------------------------- | ----------------- | --------------- |
+| **rust-yaml** | ✅ **Active Development** | 2025-current      | None known      |
+| serde_yaml    | ❌ **Deprecated**         | 2024 (deprecated) | Unfixed issues  |
+| yaml-rust     | ⚠️ Maintenance only       | 2021              | Known issues    |
+| yaml-rust2    | ✅ Active                 | 2024              | Some issues     |
+| serde_yml     | ✅ Active                 | 2024              | Limited scope   |
 
 ## Migration Benefits
 

@@ -30,7 +30,6 @@ The billion laughs attack (exponential entity expansion) is prevented through:
 Example of prevented attack:
 
 ```yaml
-
 # This would expand exponentially without protection
 a: &a ["lol", "lol", "lol", "lol", "lol", "lol", "lol", "lol", "lol"]
 b: &b [*a, *a, *a, *a, *a, *a, *a, *a, *a]
@@ -224,7 +223,7 @@ cargo test --test security_limits
 
 Tests include:
 
-- Billion laughs attack prevention
+- A Billion laughs attack prevention
 - Cyclic reference detection
 - Resource limit enforcement
 - Timeout handling
@@ -255,4 +254,4 @@ If you discover a security vulnerability:
 
 ---
 
-*Last updated: 2025-08-16*
+_Last updated: 2025-08-16_

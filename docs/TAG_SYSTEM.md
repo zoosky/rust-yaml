@@ -58,7 +58,7 @@ Custom handles defined by %TAG directives:
 %TAG !ex! tag:example.com,2024:
 ---
 !ex!widget
-  id: 123
+id: 123
 ```
 
 #### Verbatim Tags (!<uri>)
@@ -133,8 +133,8 @@ let result = yaml.load_str(yaml_str).unwrap();
 %TAG !! tag:yaml.org,2002:
 ---
 !person
-  name: !!str John Doe
-  age: !!int "30"
+name: !!str John Doe
+age: !!int "30"
 ```
 
 ### Multiple Documents with Different Tags
@@ -143,12 +143,12 @@ let result = yaml.load_str(yaml_str).unwrap();
 %TAG ! tag:example.com,2024:
 ---
 !widget
-  id: 1
+id: 1
 ...
 %TAG ! tag:another.com,2025:
 ---
 !gadget
-  id: 2
+id: 2
 ```
 
 ## Custom Tag Handlers
@@ -213,7 +213,7 @@ let resolver = TagResolver::with_schema(Schema::Json);
 ### Anchor and Tag Combination
 
 ```yaml
-base: &base !!str 123
+base: !!str &base 123
 ref: *base
 ```
 

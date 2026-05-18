@@ -17,38 +17,38 @@ diverse, inclusive, and healthy community.
 Examples of behavior that contributes to a positive environment for our
 community include:
 
-* Demonstrating empathy and kindness toward other people
-* Being respectful of differing opinions, viewpoints, and experiences
-* Giving and gracefully accepting constructive feedback
-* Accepting responsibility and apologizing to those affected by our mistakes,
+- Demonstrating empathy and kindness toward other people
+- Being respectful of differing opinions, viewpoints, and experiences
+- Giving and gracefully accepting constructive feedback
+- Accepting responsibility and apologizing to those affected by our mistakes,
   and learning from the experience
 
-* Focusing on what is best not just for us as individuals, but for the overall
+- Focusing on what is best not just for us as individuals, but for the overall
   community
 
-* Using welcoming and inclusive language
-* Being patient with newcomers and those learning
-* Acknowledging the contributions of all community members
-* Providing helpful and constructive code reviews
-* Sharing knowledge and helping others grow
+- Using welcoming and inclusive language
+- Being patient with newcomers and those learning
+- Acknowledging the contributions of all community members
+- Providing helpful and constructive code reviews
+- Sharing knowledge and helping others grow
 
 Examples of unacceptable behavior include:
 
-* The use of sexualized language or imagery, and sexual attention or advances of
+- The use of sexualized language or imagery, and sexual attention or advances of
   any kind
 
-* Trolling, insulting or derogatory comments, and personal or political attacks
-* Public or private harassment
-* Publishing others' private information, such as a physical or email address,
+- Trolling, insulting or derogatory comments, and personal or political attacks
+- Public or private harassment
+- Publishing others' private information, such as a physical or email address,
   without their explicit permission
 
-* Conduct which could reasonably be considered inappropriate in a professional
+- Conduct which could reasonably be considered inappropriate in a professional
   setting
 
-* Dismissive or hostile behavior toward contributions or questions
-* Gatekeeping or elitist attitudes
-* Spam or off-topic discussions
-* Any form of discrimination or prejudice
+- Dismissive or hostile behavior toward contributions or questions
+- Gatekeeping or elitist attitudes
+- Spam or off-topic discussions
+- Any form of discrimination or prejudice
 
 ## Enforcement Responsibilities
 
@@ -72,12 +72,12 @@ representative at an online or offline event.
 
 This includes:
 
-* GitHub repository interactions (issues, pull requests, discussions)
-* Code reviews and technical discussions
-* Community forums and chat channels
-* Conferences, meetups, and other events
-* Social media interactions when representing the project
-* Private communications related to community business
+- GitHub repository interactions (issues, pull requests, discussions)
+- Code reviews and technical discussions
+- Community forums and chat channels
+- Conferences, meetups, and other events
+- Social media interactions when representing the project
+- Private communications related to community business
 
 ## Enforcement
 
@@ -93,10 +93,10 @@ reporter of any incident.
 
 When reporting an incident, please include:
 
-* Your contact information
-* Names (real, nicknames, or pseudonyms) of any individuals involved
-* Your account of what occurred, including any relevant links or screenshots
-* Any additional information that may be helpful
+- Your contact information
+- Names (real, nicknames, or pseudonyms) of any individuals involved
+- Your account of what occurred, including any relevant links or screenshots
+- Any additional information that may be helpful
 
 Reports will be handled with discretion and confidentiality. We will not
 publicly discuss the details of reports or enforcement actions.
@@ -160,52 +160,52 @@ Beyond avoiding negative behaviors, we encourage all community members to:
 
 ### For Contributors
 
-* **Be patient** with newcomers and those learning Rust or YAML
-* **Share knowledge** generously through documentation, examples, and mentoring
-* **Celebrate successes** of other community members
-* **Provide constructive feedback** in code reviews and discussions
-* **Ask questions** when you need help - no question is too basic
-* **Admit mistakes** and learn from them openly
+- **Be patient** with newcomers and those learning Rust or YAML
+- **Share knowledge** generously through documentation, examples, and mentoring
+- **Celebrate successes** of other community members
+- **Provide constructive feedback** in code reviews and discussions
+- **Ask questions** when you need help - no question is too basic
+- **Admit mistakes** and learn from them openly
 
 ### For Maintainers
 
-* **Be responsive** to issues and pull requests
-* **Provide clear guidance** on project direction and standards
-* **Recognize contributions** publicly when appropriate
-* **Foster newcomer participation** through mentoring and clear documentation
-* **Make decisions transparently** and explain reasoning when needed
-* **Delegate responsibilities** to grow the community
+- **Be responsive** to issues and pull requests
+- **Provide clear guidance** on project direction and standards
+- **Recognize contributions** publicly when appropriate
+- **Foster newcomer participation** through mentoring and clear documentation
+- **Make decisions transparently** and explain reasoning when needed
+- **Delegate responsibilities** to grow the community
 
 ### Technical Discussions
 
 When engaging in technical discussions:
 
-* **Focus on ideas, not people** - critique code and concepts, not individuals
-* **Be specific** in feedback and suggestions
-* **Provide examples** when explaining complex concepts
-* **Link to relevant documentation** or specifications
-* **Consider different perspectives** and use cases
-* **Stay on topic** and keep discussions productive
+- **Focus on ideas, not people** - critique code and concepts, not individuals
+- **Be specific** in feedback and suggestions
+- **Provide examples** when explaining complex concepts
+- **Link to relevant documentation** or specifications
+- **Consider different perspectives** and use cases
+- **Stay on topic** and keep discussions productive
 
 ## Diversity and Inclusion
 
 We are committed to creating an inclusive environment where:
 
-* All backgrounds and experience levels are welcomed
-* Different perspectives are valued and heard
-* Learning and growth are encouraged
-* Mistakes are treated as learning opportunities
-* Success is measured by community health, not just code contributions
+- All backgrounds and experience levels are welcomed
+- Different perspectives are valued and heard
+- Learning and growth are encouraged
+- Mistakes are treated as learning opportunities
+- Success is measured by community health, not just code contributions
 
 ## Rust Community Values
 
 As part of the broader Rust ecosystem, we embrace the Rust community's values:
 
-* **Performance** - We strive for fast, efficient code
-* **Reliability** - We build dependable software
-* **Safety** - We prioritize memory safety and security
-* **Ergonomics** - We create pleasant developer experiences
-* **Community** - We support and learn from each other
+- **Performance** - We strive for fast, efficient code
+- **Reliability** - We build dependable software
+- **Safety** - We prioritize memory safety and security
+- **Ergonomics** - We create pleasant developer experiences
+- **Community** - We support and learn from each other
 
 ## Attribution
 
@@ -228,9 +228,9 @@ For answers to common questions about this code of conduct, see the FAQ at
 For questions about this Code of Conduct, please contact the project maintainers
 through:
 
-* GitHub Issues (for general questions)
-* Direct email to maintainers (for sensitive matters)
-* GitHub Discussions (for community discussion)
+- GitHub Issues (for general questions)
+- Direct email to maintainers (for sensitive matters)
+- GitHub Discussions (for community discussion)
 
 ---
 

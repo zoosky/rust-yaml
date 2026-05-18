@@ -123,11 +123,11 @@ config.incremental = true;            // Enable incremental parsing
 
 ### Configuration Presets
 
-| Preset | Buffer Size | Chunk Size | Event Buffer | Use Case |
-|--------|------------|------------|--------------|----------|
-| `default()` | 64KB | 8KB | 1000 | General purpose |
-| `large_file()` | 1MB | 64KB | 10000 | Large files |
-| `low_memory()` | 8KB | 1KB | 100 | Memory-constrained |
+| Preset         | Buffer Size | Chunk Size | Event Buffer | Use Case           |
+| -------------- | ----------- | ---------- | ------------ | ------------------ |
+| `default()`    | 64KB        | 8KB        | 1000         | General purpose    |
+| `large_file()` | 1MB         | 64KB       | 10000        | Large files        |
+| `low_memory()` | 8KB         | 1KB        | 100          | Memory-constrained |
 
 ## Usage Examples
 
@@ -258,12 +258,12 @@ async fn process_network_yaml(addr: &str) -> Result<()> {
 
 Benchmarks show significant improvements for large documents:
 
-| Document Size | Standard Parser | Streaming Parser | Memory Usage |
-|--------------|-----------------|------------------|--------------|
-| 1MB | 15ms | 12ms | 1MB vs 64KB |
-| 10MB | 150ms | 95ms | 10MB vs 64KB |
-| 100MB | 1500ms | 850ms | 100MB vs 64KB |
-| 1GB | 15000ms | 8000ms | 1GB vs 64KB |
+| Document Size | Standard Parser | Streaming Parser | Memory Usage  |
+| ------------- | --------------- | ---------------- | ------------- |
+| 1MB           | 15ms            | 12ms             | 1MB vs 64KB   |
+| 10MB          | 150ms           | 95ms             | 10MB vs 64KB  |
+| 100MB         | 1500ms          | 850ms            | 100MB vs 64KB |
+| 1GB           | 15000ms         | 8000ms           | 1GB vs 64KB   |
 
 ## Best Practices
 
@@ -382,4 +382,4 @@ fn parallel_yaml_processing(files: Vec<String>) -> Result<()> {
 
 ---
 
-*Last updated: 2025-08-16*
+_Last updated: 2025-08-16_

@@ -7,7 +7,7 @@ This document describes the enterprise-grade pre-commit configuration for the ru
 Our pre-commit configuration implements a comprehensive set of checks that run automatically before each commit, ensuring:
 
 - **Code Quality**: Rust formatting, linting, and compilation checks
-- **Security**: Vulnerability scanning, secret detection, and dependency auditing  
+- **Security**: Vulnerability scanning, secret detection, and dependency auditing
 - **Standards**: Conventional commit messages, documentation, and consistency
 - **Compliance**: License checking and enterprise security policies
 
@@ -217,7 +217,7 @@ Hooks can be configured to run at different stages:
 The configuration can be extended with:
 
 - Custom security scanners
-- Additional license policies  
+- Additional license policies
 - Organization-specific rules
 - Integration with enterprise security tools
 

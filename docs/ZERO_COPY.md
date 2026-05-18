@@ -133,11 +133,11 @@ base: &base
   retries: 3
 
 service1:
-  <<: *base  # Cheap Rc clone
+  <<: *base # Cheap Rc clone
   port: 8080
 
 service2:
-  <<: *base  # Cheap Rc clone
+  <<: *base # Cheap Rc clone
   port: 8081
 ```
 
@@ -263,14 +263,14 @@ fn process_document(doc: OptimizedValue) {
 Typical improvements with optimized APIs:
 
 | Document Size | Standard Time | Optimized Time | Improvement |
-|--------------|---------------|----------------|-------------|
-| Small (1KB)  | 50µs         | 45µs          | 10%         |
-| Medium (10KB)| 500µs        | 350µs         | 30%         |
-| Large (100KB)| 5ms          | 3ms           | 40%         |
-| Huge (1MB)   | 50ms         | 28ms          | 44%         |
+| ------------- | ------------- | -------------- | ----------- |
+| Small (1KB)   | 50µs          | 45µs           | 10%         |
+| Medium (10KB) | 500µs         | 350µs          | 30%         |
+| Large (100KB) | 5ms           | 3ms            | 40%         |
+| Huge (1MB)    | 50ms          | 28ms           | 44%         |
 
-*Note: Actual performance depends on document structure, anchor usage, and hardware.*
+_Note: Actual performance depends on document structure, anchor usage, and hardware._
 
 ---
 
-*Last updated: 2025-08-16*
+_Last updated: 2025-08-16_

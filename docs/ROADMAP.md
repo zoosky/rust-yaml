@@ -325,5 +325,5 @@ Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ---
 
-*Last updated: 2025-08-16*
-*Next review: 2025-10-16*
+_Last updated: 2025-08-16_
+_Next review: 2025-10-16_

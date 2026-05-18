@@ -22,7 +22,7 @@ GitVersion analyzes the Git history and branch structure to calculate versions a
 Use these markers in commit messages to control version bumping:
 
 - `+semver: major` or `+semver: breaking` - Increment major version
-- `+semver: minor` or `+semver: feature` - Increment minor version  
+- `+semver: minor` or `+semver: feature` - Increment minor version
 - `+semver: patch` or `+semver: fix` - Increment patch version
 - `+semver: none` or `+semver: skip` - No version increment
 
@@ -36,7 +36,7 @@ BREAKING CHANGE: The API interface has been completely redesigned.
 
 +semver: major"
 
-# Minor version bump  
+# Minor version bump
 git commit -m "feat: add new YAML parsing features
 
 +semver: minor"

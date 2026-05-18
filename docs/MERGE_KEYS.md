@@ -61,7 +61,7 @@ defaults: &defaults
 
 custom:
   <<: *defaults
-  port: 3306  # Overrides the merged value
+  port: 3306 # Overrides the merged value
 ```
 
 Keys can be specified before or after the merge key - explicit keys always take precedence.
@@ -79,7 +79,7 @@ base: &base
 derived:
   <<: *base
   settings:
-    c: 3  # Replaces the entire 'settings' mapping
+    c: 3 # Replaces the entire 'settings' mapping
 ```
 
 Result: `derived.settings` contains only `{c: 3}`.

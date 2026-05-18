@@ -4,12 +4,12 @@ This guide helps you migrate from other Rust YAML libraries to rust-yaml, highli
 
 ## Quick Migration Reference
 
-| From | To rust-yaml | Benefits |
-|------|-------------|----------|
-| `serde_yaml` (deprecated) | `rust_yaml` | Security, active maintenance, full YAML 1.2 |
-| `yaml-rust` | `rust_yaml` | Better performance, security, modern API |
-| `yaml-rust2` | `rust_yaml` | Enhanced security, complete spec support |
-| `serde_yml` | `rust_yaml` | Full YAML features beyond serde scope |
+| From                      | To rust-yaml | Benefits                                    |
+| ------------------------- | ------------ | ------------------------------------------- |
+| `serde_yaml` (deprecated) | `rust_yaml`  | Security, active maintenance, full YAML 1.2 |
+| `yaml-rust`               | `rust_yaml`  | Better performance, security, modern API    |
+| `yaml-rust2`              | `rust_yaml`  | Enhanced security, complete spec support    |
+| `serde_yml`               | `rust_yaml`  | Full YAML features beyond serde scope       |
 
 ## Migration from serde_yaml (Deprecated)
 

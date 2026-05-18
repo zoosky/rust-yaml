@@ -4,13 +4,13 @@ This document compares rust-yaml with other popular Rust YAML libraries availabl
 
 ## Library Overview
 
-| Library | Version | Downloads/Month | Status | YAML Spec |
-|---------|---------|-----------------|--------|-----------|
-| **rust-yaml** | 0.0.1 | New | Active | YAML 1.2 Full |
-| [serde_yaml](https://crates.io/crates/serde_yaml) | 0.9.34 | ~45M | **Deprecated** | YAML 1.2 Subset |
-| [yaml-rust](https://crates.io/crates/yaml-rust) | 0.4.5 | ~3.5M | Maintenance | YAML 1.2 Subset |
-| [yaml-rust2](https://crates.io/crates/yaml-rust2) | 0.8.1 | ~1.2M | Active | YAML 1.2 Subset |
-| [serde_yml](https://crates.io/crates/serde_yml) | 0.0.12 | ~400K | Active | YAML 1.2 Subset |
+| Library                                           | Version | Downloads/Month | Status         | YAML Spec       |
+| ------------------------------------------------- | ------- | --------------- | -------------- | --------------- |
+| **rust-yaml**                                     | 0.0.1   | New             | Active         | YAML 1.2 Full   |
+| [serde_yaml](https://crates.io/crates/serde_yaml) | 0.9.34  | ~45M            | **Deprecated** | YAML 1.2 Subset |
+| [yaml-rust](https://crates.io/crates/yaml-rust)   | 0.4.5   | ~3.5M           | Maintenance    | YAML 1.2 Subset |
+| [yaml-rust2](https://crates.io/crates/yaml-rust2) | 0.8.1   | ~1.2M           | Active         | YAML 1.2 Subset |
+| [serde_yml](https://crates.io/crates/serde_yml)   | 0.0.12  | ~400K           | Active         | YAML 1.2 Subset |
 
 ## Key Differentiators
 
@@ -19,7 +19,6 @@ This document compares rust-yaml with other popular Rust YAML libraries availabl
 #### 1. Full YAML 1.2 Specification Support
 
 ```yaml
-
 # Complex features that rust-yaml handles but others may not:
 
 %YAML 1.2
@@ -85,36 +84,36 @@ yaml.add_tag_handler("!custom", custom_handler);
 
 #### yaml-rust vs rust-yaml
 
-| Feature | yaml-rust | rust-yaml |
-|---------|-----------|-----------|
-| YAML 1.2 Support | Partial | Full ✅ |
-| Security Limits | Basic | Comprehensive ✅ |
-| Performance | Good | Optimized ✅ |
-| Memory Usage | Standard | Zero-copy options ✅ |
-| Streaming | No | Yes ✅ |
-| Round-trip | Limited | Full ✅ |
-| Active Development | Maintenance | Active ✅ |
+| Feature            | yaml-rust   | rust-yaml            |
+| ------------------ | ----------- | -------------------- |
+| YAML 1.2 Support   | Partial     | Full ✅              |
+| Security Limits    | Basic       | Comprehensive ✅     |
+| Performance        | Good        | Optimized ✅         |
+| Memory Usage       | Standard    | Zero-copy options ✅ |
+| Streaming          | No          | Yes ✅               |
+| Round-trip         | Limited     | Full ✅              |
+| Active Development | Maintenance | Active ✅            |
 
 #### yaml-rust2 vs rust-yaml
 
-| Feature | yaml-rust2 | rust-yaml |
-|---------|------------|-----------|
-| Fork of | yaml-rust | Fresh implementation |
-| API Stability | Stable | New (evolving) |
-| YAML 1.2 | Partial | Full ✅ |
-| Security | Basic | Advanced ✅ |
-| Performance | Good | Multiple models ✅ |
-| Zero-copy | No | Yes ✅ |
+| Feature       | yaml-rust2 | rust-yaml            |
+| ------------- | ---------- | -------------------- |
+| Fork of       | yaml-rust  | Fresh implementation |
+| API Stability | Stable     | New (evolving)       |
+| YAML 1.2      | Partial    | Full ✅              |
+| Security      | Basic      | Advanced ✅          |
+| Performance   | Good       | Multiple models ✅   |
+| Zero-copy     | No         | Yes ✅               |
 
 #### serde_yml vs rust-yaml
 
-| Feature | serde_yml | rust-yaml |
-|---------|-----------|-----------|
-| Serde Integration | Primary focus | Available |
-| API Design | Serde-first | YAML-first ✅ |
-| Security | Basic | Comprehensive ✅ |
-| Performance | Good | Optimized ✅ |
-| Feature Coverage | Subset | Full spec ✅ |
+| Feature           | serde_yml     | rust-yaml        |
+| ----------------- | ------------- | ---------------- |
+| Serde Integration | Primary focus | Available        |
+| API Design        | Serde-first   | YAML-first ✅    |
+| Security          | Basic         | Comprehensive ✅ |
+| Performance       | Good          | Optimized ✅     |
+| Feature Coverage  | Subset        | Full spec ✅     |
 
 ## Performance Comparison
 
@@ -147,12 +146,12 @@ let value = yaml_rust::load(&input)?;
 
 ### Vulnerability Protection
 
-| Attack Vector | rust-yaml | Others |
-|---------------|-----------|--------|
-| Billion Laughs | ✅ Protected | ⚠️ Limited |
-| Deep Nesting | ✅ Protected | ⚠️ Basic |
-| Large Documents | ✅ Protected | ⚠️ Limited |
-| Cyclic References | ✅ Detected | ⚠️ Basic |
+| Attack Vector       | rust-yaml    | Others        |
+| ------------------- | ------------ | ------------- |
+| Billion Laughs      | ✅ Protected | ⚠️ Limited    |
+| Deep Nesting        | ✅ Protected | ⚠️ Basic      |
+| Large Documents     | ✅ Protected | ⚠️ Limited    |
+| Cyclic References   | ✅ Detected  | ⚠️ Basic      |
 | Resource Exhaustion | ✅ Prevented | ❌ Vulnerable |
 
 ### Example: Billion Laughs Protection

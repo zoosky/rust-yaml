@@ -350,21 +350,26 @@ cargo doc --no-deps
 
    ```markdown
    ## Summary
+
    Brief description of changes
 
    ## Changes
+
    - Specific change 1
    - Specific change 2
 
    ## Testing
+
    - [ ] All existing tests pass
    - [ ] Added new tests for feature X
    - [ ] Manual testing completed
 
    ## Performance Impact
+
    Description of any performance changes
 
    ## Breaking Changes
+
    List any breaking changes
    ```
 

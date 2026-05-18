@@ -181,7 +181,7 @@ Triggered by version tags (e.g., `v1.2.3`):
 - **Version validation** (tag vs Cargo.toml)
 - **Full testing** and validation
 - **GitHub release** creation with changelog
-- **Crates.io publishing
+- \*\*Crates.io publishing
 
 ### Version Management
 
@@ -478,7 +478,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed contribution guidelines.
 ### Test Coverage
 
 - **Unit Tests**: 134 tests passing ✅
-- **Integration Tests**: 16 tests passing ✅  
+- **Integration Tests**: 16 tests passing ✅
 - **Security Tests**: Comprehensive alias depth, limits, and attack prevention ✅
 - **Performance Tests**: Benchmarks for parsing, streaming, zero-copy ✅
 - **CI Pipeline**: All GitHub Actions workflows passing ✅

@@ -72,8 +72,8 @@ case. The harness:
    the upstream test-suite tree DSL (`+STR`, `+DOC`, `+MAP`, `=VAL :…`, etc.).
 4. If `test.event` is present, compares actual vs expected event lines.
    If not, falls back to parse-success comparison.
-5. Categorizes failures: *wrong accept* (parser accepted invalid input),
-   *wrong reject* (parser failed on valid input), *wrong events* (parsed
+5. Categorizes failures: _wrong accept_ (parser accepted invalid input),
+   _wrong reject_ (parser failed on valid input), _wrong events_ (parsed
    but produced a different event tree).
 6. Asserts a minimum pass-rate threshold — currently **10%** — so aggregate
    regressions fail CI. Raise the threshold in `tests/yaml_test_suite.rs` as
@@ -88,15 +88,15 @@ with multiple subtests follow the `VJP3/00`, `VJP3/01`, ... pattern.
 
 Per upstream `ReadMe.md`:
 
-| File         | Meaning                                                       |
-| ------------ | ------------------------------------------------------------- |
-| `===`        | Test name / label                                             |
-| `in.yaml`    | Input YAML to parse                                           |
-| `in.json`    | JSON value the input should decode to                         |
-| `out.yaml`   | Canonical dumper output                                       |
-| `emit.yaml`  | Emitter output                                                |
-| `test.event` | Event-stream DSL output (used for tree comparison)            |
-| `error`      | Marker file — when present, parsing the input **must** fail   |
+| File         | Meaning                                                     |
+| ------------ | ----------------------------------------------------------- |
+| `===`        | Test name / label                                           |
+| `in.yaml`    | Input YAML to parse                                         |
+| `in.json`    | JSON value the input should decode to                       |
+| `out.yaml`   | Canonical dumper output                                     |
+| `emit.yaml`  | Emitter output                                              |
+| `test.event` | Event-stream DSL output (used for tree comparison)          |
+| `error`      | Marker file — when present, parsing the input **must** fail |
 
 `in.json`, `out.yaml`, and `emit.yaml` comparisons remain follow-up work; the
 harness today asserts on `test.event` plus the `error` marker.

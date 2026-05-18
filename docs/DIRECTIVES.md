@@ -113,7 +113,7 @@ doc2: different tag namespace
 When TAG directives are defined:
 
 - `!foo` → Expands using primary handle prefix
-- `!!str` → Expands using secondary handle prefix  
+- `!!str` → Expands using secondary handle prefix
 - `!e!widget` → Expands using named handle prefix
 - `!<tag:explicit.com,2024:type>` → Verbatim tag (no expansion)
 
@@ -180,7 +180,7 @@ Currently, rust-yaml:
 
 - Parses and preserves directives but doesn't enforce version-specific behavior differences
 - Doesn't fully resolve custom tags to type handlers (planned enhancement)
-- Supports common tag handles (!,  !!, !name!)
+- Supports common tag handles (!, !!, !name!)
 
 ## Future Enhancements
 

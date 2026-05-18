@@ -32,16 +32,19 @@
 ### 4. Verify Configuration
 
 The repository includes:
+
 - `.github/workflows/ci.yml` - CI workflow with coverage job
 - `codecov.yml` - Codecov configuration file
 
 ### 5. Trigger Coverage Report
 
 Coverage reports are generated on:
+
 - Every push to main/master branch
 - Every pull request
 
 To manually trigger:
+
 1. Push a commit to any branch
 2. The CI workflow will automatically run
 3. Check the "Coverage Report" job in GitHub Actions

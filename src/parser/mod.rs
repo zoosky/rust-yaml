@@ -1147,10 +1147,16 @@ impl BasicParser {
                                     "Mapping key not followed by `:`",
                                 ));
                             }
+                            // §6.9: when synthesising the missing value
+                            // for the last key, consume any pending
+                            // anchor/tag — they were the property of
+                            // that absent value (yaml-test-suite PW8X
+                            // \`b: &b\\n- ...\` — &b belongs to b's empty
+                            // value, not a separate tagged scalar).
                             self.events.push(Event::scalar(
                                 token.start_position,
-                                None,
-                                None,
+                                self.pending_anchor.take(),
+                                self.pending_tag.take(),
                                 String::new(),
                                 true,
                                 false,
@@ -1159,7 +1165,8 @@ impl BasicParser {
                         }
                         // Flush leftover anchor/tag as a final tagged
                         // empty scalar (mirror of the BlockSequence
-                        // arm).
+                        // arm). Skipped above when the missing-value
+                        // synth already consumed it.
                         if self.pending_anchor.is_some() || self.pending_tag.is_some() {
                             self.events.push(Event::scalar(
                                 token.start_position,

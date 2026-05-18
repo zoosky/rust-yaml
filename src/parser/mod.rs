@@ -205,6 +205,13 @@ pub struct BasicParser {
     /// a later line, it's the explicit value separator — close any
     /// inline-wrapped inner mapping first.
     last_key_marker_column: Option<usize>,
+    /// Set when an explicit value separator just closed an inline-
+    /// wrapped key. The next \`<scalar>:<scalar>\` on the same line
+    /// should also be wrapped in an inner mapping (V9D5's value side).
+    just_closed_inline_wrap: bool,
+    /// Column of an open inline-wrap mapping (V9D5). Used to detect
+    /// the matching explicit-value separator and close it.
+    inline_wrap_column: Option<usize>,
     pending_tag: Option<String>,
     /// Same idea as `pending_anchor_line` but for tags. Used to detect
     /// a freestanding tag in block-sequence context that should be
@@ -281,6 +288,8 @@ impl BasicParser {
             pending_anchor_line: None,
             last_key_marker_line: None,
             last_key_marker_column: None,
+            just_closed_inline_wrap: false,
+            inline_wrap_column: None,
             pending_tag: None,
             pending_tag_line: None,
             last_token_type: None,
@@ -319,6 +328,8 @@ impl BasicParser {
             pending_anchor_line: None,
             last_key_marker_line: None,
             last_key_marker_column: None,
+            just_closed_inline_wrap: false,
+            inline_wrap_column: None,
             pending_tag: None,
             pending_tag_line: None,
             last_token_type: None,
@@ -359,6 +370,8 @@ impl BasicParser {
             pending_anchor_line: None,
             last_key_marker_line: None,
             last_key_marker_column: None,
+            just_closed_inline_wrap: false,
+            inline_wrap_column: None,
             pending_tag: None,
             pending_tag_line: None,
             last_token_type: None,
@@ -1437,6 +1450,33 @@ impl BasicParser {
                 //     previous `:` Value token — that puts the scalar
                 //     in the value slot of the current key
                 //     (yaml-test-suite 6M2F: `? &a a\n: &b b\n: *a`).
+                // §8.22 V9D5: when we JUST closed an inline-wrapped
+                // explicit key, the value position can also hold an
+                // inline single-pair mapping. If the next token is
+                // \`:\` (a key/value separator on this scalar's line),
+                // wrap the scalar as the key of an inner mapping.
+                if matches!(self.state, ParserState::BlockMappingValue)
+                    && self.just_closed_inline_wrap
+                {
+                    self.just_closed_inline_wrap = false;
+                    if let Ok(Some(next_token)) = self.scanner.peek_token() {
+                        if matches!(next_token.token_type, TokenType::Value)
+                            && next_token.start_position.line == token.start_position.line
+                        {
+                            self.state_stack.push(self.state);
+                            self.events.push(Event::mapping_start(
+                                token.start_position,
+                                None,
+                                None,
+                                false,
+                            ));
+                            self.state = ParserState::BlockMappingKey;
+                            // Fall through to the normal Scalar push;
+                            // the scalar will become the inner key.
+                        }
+                    }
+                }
+
                 if matches!(self.state, ParserState::BlockMappingValue) {
                     let last_was_implicit_empty =
                         matches!(self.events.last(), Some(ev) if matches!(
@@ -1703,12 +1743,13 @@ impl BasicParser {
                         // key (via the path below), close it first so
                         // the outer mapping receives the value (yaml-
                         // test-suite V9D5).
+                        // Use inline_wrap_column (set when we opened a
+                        // V9D5-style inline wrap) for matching the
+                        // close. Don't depend on last_key_marker_*
+                        // since those get reset on wrap open.
                         if self
-                            .last_key_marker_column
+                            .inline_wrap_column
                             .map_or(false, |c| c == token.start_position.column)
-                            && self
-                                .last_key_marker_line
-                                .map_or(false, |l| l < token.start_position.line)
                             && !self.state_stack.is_empty()
                             && matches!(
                                 self.state_stack.last(),
@@ -1720,7 +1761,8 @@ impl BasicParser {
                             if !innermost_mapping_has_odd_children(&self.events) {
                                 self.events.push(Event::mapping_end(token.start_position));
                                 self.state = self.state_stack.pop().unwrap();
-                                self.last_key_marker_column = None;
+                                self.inline_wrap_column = None;
+                                self.just_closed_inline_wrap = true;
                             }
                         }
                         // §8.22: when the explicit key marker (\`?\`) is
@@ -1800,8 +1842,11 @@ impl BasicParser {
                                         false,
                                     ),
                                 );
-                                // Reset key marker so it doesn't fire
-                                // again for a different pair.
+                                // Record the wrap's "outer key column"
+                                // so the matching explicit-value `:`
+                                // (on a later line at the same column
+                                // as the `?` marker) can close it.
+                                self.inline_wrap_column = self.last_key_marker_column;
                                 self.last_key_marker_line = None;
                                 self.state = ParserState::BlockMappingValue;
                                 self.last_token_type = token_type_for_tracking;

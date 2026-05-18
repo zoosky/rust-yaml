@@ -292,7 +292,7 @@ impl BasicScanner {
         // is exempt — `[a,\\nb]` is fine there because the flow content
         // isn't nested inside any block (yaml-test-suite 4ZYM).
         if self.flow_level > 0 {
-            if self.indent_stack.len() > 1 {
+            if self.indent_stack.len() > 1 || !self.compact_sequence_indents.is_empty() {
                 let mut probe = 0usize;
                 let mut i = self.current_char_index;
                 while i < self.char_cache.len() {

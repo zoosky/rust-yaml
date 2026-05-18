@@ -2195,7 +2195,15 @@ impl BasicScanner {
             // characters listed below covers the alphanumeric + URI-safe
             // punctuation set used by yaml-test-suite. Percent decoding of
             // `%XX` happens later in `TagResolver::resolve`.
+            //
+            // §5.3: inside a flow collection, the flow indicators
+            // `,`, `[`, `]`, `{`, `}` always terminate a node — so we
+            // must NOT consume them into the tag suffix even though
+            // RFC 3986 permits them in URIs (yaml-test-suite WZ62).
             while let Some(ch) = self.current_char {
+                if self.flow_level > 0 && matches!(ch, ',' | '[' | ']' | '{' | '}') {
+                    break;
+                }
                 if ch.is_alphanumeric() || "-._~:/?#[]@!$&'()*+,;=%".contains(ch) {
                     tag.push(ch);
                     self.advance();

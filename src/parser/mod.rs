@@ -1574,13 +1574,15 @@ impl BasicParser {
                         // means the key scalar is already on the
                         // stack — normal). If children are even,
                         // we're starting a new entry with an empty
-                        // key (yaml-test-suite NKF9 \`{ key: value, :
-                        // empty key }\`).
+                        // key. The pending anchor/tag (if any) belongs
+                        // to that empty key (yaml-test-suite NKF9,
+                        // WZ62: \`!!str : bar\` — empty key tagged
+                        // !!str).
                         if !innermost_mapping_has_odd_children(&self.events) {
                             self.events.push(Event::scalar(
                                 token.start_position,
-                                None,
-                                None,
+                                self.pending_anchor.take(),
+                                self.pending_tag.take(),
                                 String::new(),
                                 true,
                                 false,
@@ -1644,8 +1646,10 @@ impl BasicParser {
                 // §7.5: inside a flow mapping, a comma terminates the
                 // current entry. If the entry is missing its value
                 // (state FlowMappingValue or odd children), synth an
-                // implicit empty scalar (yaml-test-suite 8KB6, 9BXH,
-                // FRK4).
+                // implicit empty scalar — consuming any pending
+                // anchor/tag, which would have been a property of
+                // the missing value (yaml-test-suite 8KB6, 9BXH,
+                // FRK4, WZ62).
                 if matches!(
                     self.state,
                     ParserState::FlowMapping
@@ -1655,8 +1659,8 @@ impl BasicParser {
                 {
                     self.events.push(Event::scalar(
                         token.start_position,
-                        None,
-                        None,
+                        self.pending_anchor.take(),
+                        self.pending_tag.take(),
                         String::new(),
                         true,
                         false,

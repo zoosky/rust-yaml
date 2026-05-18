@@ -357,6 +357,7 @@ impl BasicScanner {
         }
 
         // Check if we need to emit block end tokens for decreased indentation
+        let pre_pop_top = self.indent_stack.last().copied().unwrap_or(0);
         while let Some(&last_indent) = self.indent_stack.last() {
             if indent < last_indent && last_indent > 0 {
                 self.indent_stack.pop();
@@ -366,6 +367,37 @@ impl BasicScanner {
             } else {
                 break;
             }
+        }
+
+        // §6.1: after a dedent, the new line's indent must match some
+        // existing container level — keys/items at a sibling level
+        // must share a column. Landing at a column that is between
+        // two stack levels (e.g. parent at 0, just-closed at 3, new
+        // line at 1) is invalid because no open mapping/sequence sits
+        // at indent 1 (yaml-test-suite DMG6, N4JP).
+        //
+        // The check applies only when:
+        //   * we actually dedented (pre-pop top was deeper than now),
+        //   * the new line has content (the next char is not blank /
+        //     newline / EOF / comment),
+        //   * indent doesn't match the new top.
+        if pre_pop_top > 0
+            && pre_pop_top > self.indent_stack.last().copied().unwrap_or(0)
+            && self
+                .current_char
+                .map_or(false, |c| !matches!(c, '\n' | '\r' | '#'))
+            && indent != self.indent_stack.last().copied().unwrap_or(0)
+        {
+            // Allow if indent is a valid deeper level — e.g.
+            // sibling at depth then deeper child — but for the
+            // dedent path indent must equal a known stack level.
+            return Err(Error::scan(
+                self.position,
+                format!(
+                    "Indentation {indent} doesn't match any open container (expected {} or deeper)",
+                    self.indent_stack.last().copied().unwrap_or(0)
+                ),
+            ));
         }
 
         Ok(())

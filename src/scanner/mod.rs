@@ -1513,8 +1513,20 @@ impl BasicScanner {
                     break;
                 }
 
-                // Flow indicators
+                // Flow indicators. §7.4 allows a flow collection as
+                // the implicit key of a block mapping (`[a]: b`,
+                // `{x: y}: z`). When the flow-open is at line-start
+                // (block context) and a `:` follows on the same line,
+                // open the wrapping block mapping at the column of the
+                // flow-open token, just as we do for line-start
+                // properties (yaml-test-suite LX3P, 4FJ6, M2N8/01).
                 '[' => {
+                    if self.flow_level == 0
+                        && self.position.column == self.current_indent + 1
+                        && self.check_for_mapping_ahead()
+                    {
+                        self.maybe_open_block_mapping_for_key()?;
+                    }
                     let pos = self.position;
                     self.advance();
                     self.flow_level += 1;
@@ -1547,6 +1559,12 @@ impl BasicScanner {
                         .push(Token::new(TokenType::FlowSequenceEnd, pos, self.position));
                 }
                 '{' => {
+                    if self.flow_level == 0
+                        && self.position.column == self.current_indent + 1
+                        && self.check_for_mapping_ahead()
+                    {
+                        self.maybe_open_block_mapping_for_key()?;
+                    }
                     let pos = self.position;
                     self.advance();
                     self.flow_level += 1;
@@ -2750,11 +2768,19 @@ impl BasicScanner {
                 }
             }
         }
+        // Skip balanced flow collections — a `:` *inside* `[...]` or
+        // `{...}` does NOT make the line a block-mapping key (the flow
+        // collection itself can BE the key, but its inner colons are
+        // part of its own structure). yaml-test-suite: `{key: v}` is
+        // a standalone flow mapping; `[a]: outer` is a block-map key.
+        let mut flow_depth: i32 = 0;
         while i < n {
             let ch = self.char_cache[i];
             match ch {
                 '\n' | '\r' => return false,
-                ':' => {
+                '[' | '{' => flow_depth += 1,
+                ']' | '}' => flow_depth -= 1,
+                ':' if flow_depth <= 0 => {
                     let next = self.char_cache.get(i + 1).copied();
                     match next {
                         None => return true,

@@ -507,6 +507,51 @@ prod: *base
         );
     }
 
+    /// A flow collection (`[ ]` or `{ }`) at line-start followed by `:`
+    /// on the same line is an implicit key of a block mapping. The block
+    /// mapping must open at the column of the flow-open token. yaml-test-
+    /// suite LX3P, 4FJ6, M2N8/01.
+    #[test]
+    fn test_flow_seq_as_implicit_key_opens_block_mapping() {
+        let yaml = "[flow]: block\n";
+        let mut parser = BasicParser::new_eager(yaml.to_string());
+        let mut events = Vec::new();
+        while parser.check_event() {
+            match parser.get_event() {
+                Ok(Some(event)) => events.push(event),
+                Ok(None) => break,
+                Err(e) => panic!("parser error: {e:?}"),
+            }
+        }
+        let event_kinds: Vec<&str> = events
+            .iter()
+            .map(|e| match &e.event_type {
+                EventType::StreamStart => "+STR",
+                EventType::StreamEnd => "-STR",
+                EventType::DocumentStart { .. } => "+DOC",
+                EventType::DocumentEnd { .. } => "-DOC",
+                EventType::MappingStart { flow_style: false, .. } => "+MAP",
+                EventType::MappingStart { flow_style: true, .. } => "+MAP{}",
+                EventType::MappingEnd => "-MAP",
+                EventType::SequenceStart { flow_style: false, .. } => "+SEQ",
+                EventType::SequenceStart { flow_style: true, .. } => "+SEQ[]",
+                EventType::SequenceEnd => "-SEQ",
+                EventType::Scalar { .. } => "=VAL",
+                EventType::Alias { .. } => "*ALIAS",
+            })
+            .collect();
+        assert_eq!(
+            event_kinds,
+            vec![
+                "+STR", "+DOC", "+MAP",
+                "+SEQ[]", "=VAL", "-SEQ",
+                "=VAL",
+                "-MAP", "-DOC", "-STR"
+            ],
+            "Got: {event_kinds:?}"
+        );
+    }
+
     /// A nested block sequence (`- - x`) that continues on the next line
     /// (`  - y`) should keep the inner sequence open. yaml-test-suite
     /// 3ALJ, 57H4, 6BCT, W42U.

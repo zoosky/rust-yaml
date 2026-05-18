@@ -3158,6 +3158,53 @@ impl BasicScanner {
             false
         };
         if should_start_new_mapping {
+            // §6.1 + §8.22: opening a NEW block mapping at deeper
+            // indent than the parent only makes sense if the parent
+            // has a key WITHOUT a value (the new mapping IS that
+            // value). If the parent's last content is a complete
+            // (key, value) pair — i.e. the most recent meaningful
+            // token is a value-position scalar/alias/close — then
+            // there's no node to host the deeper mapping (yaml-test-
+            // suite U44R: \`map:\\n  key1: q\\n   key2: bad\` — key2
+            // is deeper than key1 but key1's value is already \`q\`).
+            if self.current_indent > last_indent && last_indent > 0 {
+                let mut depth = 0i32;
+                let mut last_meaningful = None;
+                for t in self.tokens.iter().rev() {
+                    match &t.token_type {
+                        TokenType::BlockEnd => depth += 1,
+                        TokenType::BlockMappingStart | TokenType::BlockSequenceStart => {
+                            if depth == 0 {
+                                break;
+                            }
+                            depth -= 1;
+                        }
+                        TokenType::Anchor(_) | TokenType::Tag(_) => continue,
+                        other => {
+                            if depth == 0 {
+                                last_meaningful = Some(other.clone());
+                                break;
+                            }
+                        }
+                    }
+                }
+                if matches!(
+                    last_meaningful,
+                    Some(
+                        TokenType::Scalar(..)
+                            | TokenType::Alias(_)
+                            | TokenType::FlowSequenceEnd
+                            | TokenType::FlowMappingEnd
+                            | TokenType::BlockScalarLiteral(..)
+                            | TokenType::BlockScalarFolded(..)
+                    )
+                ) {
+                    return Err(Error::scan(
+                        self.position,
+                        "Indentation increase has no parent in current mapping/sequence".to_string(),
+                    ));
+                }
+            }
             self.indent_stack.push(self.current_indent);
             self.indent_is_sequence.push(false);
             self.resource_tracker

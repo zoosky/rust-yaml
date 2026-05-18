@@ -454,16 +454,27 @@ impl BasicScanner {
         has_tabs: bool,
         has_spaces: bool,
     ) -> Result<()> {
-        // Prevent mixed indentation (tabs + spaces on same line)
+        // Prevent mixed indentation (tabs + spaces on same line).
+        // Carve-out: a tab AFTER one or more spaces and BEFORE
+        // value-position content (not a key) is content-area
+        // whitespace, not indentation. \`foo:\\n \\tbar\` — the 1
+        // space is indent, the tab is a separator before \`bar\`
+        // which is the value of \`foo:\` (yaml-test-suite DK95/00).
         if has_tabs && has_spaces {
-            let context = crate::error::ErrorContext::from_input(&self.input, &self.position, 4)
-                .with_suggestion("Use either tabs OR spaces for indentation, not both".to_string());
-            return Err(Error::invalid_character_with_context(
-                self.position,
-                '\t',
-                "mixed indentation",
-                context,
-            ));
+            // Peek ahead: if the content after the tab+spaces area
+            // contains a key marker (`: ` or `:`+EOL), treat as
+            // indentation (invalid). Otherwise it's a value line.
+            let looks_like_key = self.line_after_indent_is_implicit_key();
+            if looks_like_key {
+                let context = crate::error::ErrorContext::from_input(&self.input, &self.position, 4)
+                    .with_suggestion("Use either tabs OR spaces for indentation, not both".to_string());
+                return Err(Error::invalid_character_with_context(
+                    self.position,
+                    '\t',
+                    "mixed indentation",
+                    context,
+                ));
+            }
         }
         // §6.1: indentation must be space characters only. Pure-tab
         // indentation (\`\\tkey: value\`) is invalid (yaml-test-suite
@@ -3292,6 +3303,29 @@ impl BasicScanner {
     /// are scanned past (including `''` and `\"` escapes) before looking
     /// for the `: ` that would make this scalar a key. This handles
     /// yaml-test-suite 6H3V (`'foo: bar\': baz'`) and 6SLA.
+    /// Scan ahead on the current line (the rest of the post-indent
+    /// content) to determine whether it looks like an implicit
+    /// mapping key — i.e. has a `: ` separator (or `:` at line end)
+    /// before any newline.
+    fn line_after_indent_is_implicit_key(&self) -> bool {
+        let mut i = self.current_char_index;
+        let n = self.char_cache.len();
+        while i < n {
+            let ch = self.char_cache[i];
+            if ch == '\n' || ch == '\r' {
+                return false;
+            }
+            if ch == ':' {
+                let next = self.char_cache.get(i + 1).copied();
+                if next.is_none() || next.map_or(false, |c| c.is_whitespace()) {
+                    return true;
+                }
+            }
+            i += 1;
+        }
+        false
+    }
+
     /// Walk back through recent tokens; if the last non-property
     /// token was `Value` (`:`), the parser is in value-expectation
     /// mode (key not yet matched with a value).

@@ -1805,6 +1805,22 @@ impl BasicParser {
                         self.state = ParserState::FlowMappingKey;
                         self.implicit_flow_pair_depth += 1;
                     }
+                    ParserState::BlockSequence => {
+                        // §8.22: `- ? key : value` — the sequence
+                        // item is itself a block mapping with an
+                        // explicit complex key. Open the wrapping
+                        // mapping before the explicit key marker is
+                        // consumed (yaml-test-suite M2N8/00, V9D5,
+                        // KK5P, PW8X).
+                        self.state_stack.push(self.state);
+                        self.events.push(Event::mapping_start(
+                            token.start_position,
+                            self.pending_anchor.take(),
+                            self.pending_tag.take(),
+                            false,
+                        ));
+                        self.state = ParserState::BlockMappingKey;
+                    }
                     ParserState::BlockMappingKey | ParserState::FlowMappingKey => {
                         // A new `?` while we still owe a value for the
                         // previous key — synthesise an implicit empty

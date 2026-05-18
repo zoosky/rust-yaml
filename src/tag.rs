@@ -183,16 +183,14 @@ impl TagResolver {
                 if let Some(prefix) = self.directives.get(&handle) {
                     (format!("{}{}", prefix, percent_decode(suffix)), tag_str.to_string())
                 } else {
-                    // Unknown named handle, treat as primary
-                    let prefix = self
-                        .directives
-                        .get("!")
-                        .cloned()
-                        .unwrap_or_else(|| "!".to_string());
-                    (
-                        format!("{}{}", prefix, percent_decode(&tag_str[1..])),
-                        tag_str.to_string(),
-                    )
+                    // §6.8: a named-handle tag must reference a
+                    // declared \`%TAG\` directive in the current
+                    // document — there is no fallback to the primary
+                    // handle here (yaml-test-suite QLJ7).
+                    return Err(crate::Error::parse(
+                        crate::Position::start(),
+                        format!("Undefined tag handle `{handle}`"),
+                    ));
                 }
             } else {
                 // Primary handle

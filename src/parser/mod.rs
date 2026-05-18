@@ -647,6 +647,11 @@ impl BasicParser {
                     ));
                     self.events
                         .push(Event::document_end(token.start_position, true));
+                    // §6.8: \`%TAG\` and \`%YAML\` are scoped to one document.
+                    // After the implicit close, reset the tag resolver
+                    // so directives from the prior doc don't leak
+                    // (yaml-test-suite QLJ7).
+                    self.tag_resolver = TagResolver::new();
                 } else if has_open_document(&self.events) {
                     // The previous document is still open — its outer
                     // collection(s) and the document itself need closing
@@ -654,6 +659,7 @@ impl BasicParser {
                     close_open_collections(&mut self.events, token.start_position);
                     self.events
                         .push(Event::document_end(token.start_position, true));
+                    self.tag_resolver = TagResolver::new();
                 }
 
                 // Create document start with directives
@@ -1818,11 +1824,25 @@ impl BasicParser {
                 // scopes, accept the overwrite silently (yaml-test-suite
                 // FH7J relies on this).
                 // Resolve and normalize the tag before storing.
+                // §6.8: an unresolvable named-handle tag (e.g. `!prefix!X`
+                // when no `%TAG !prefix!` directive is in scope) is
+                // invalid (yaml-test-suite QLJ7).
                 match self.tag_resolver.resolve(&tag) {
                     Ok(resolved_tag) => {
                         self.pending_tag = Some(resolved_tag.uri);
                     }
-                    Err(_) => {
+                    Err(e) => {
+                        // Only error on named-handle tags (`!name!suffix`),
+                        // not bare-tag fallback paths.
+                        let is_named_handle = tag.starts_with('!')
+                            && tag[1..].contains('!')
+                            && !tag.starts_with("!!");
+                        if is_named_handle {
+                            return Err(Error::parse(
+                                token.start_position,
+                                format!("Undefined tag handle in `{tag}`: {e}"),
+                            ));
+                        }
                         self.pending_tag = Some(tag.clone());
                     }
                 }

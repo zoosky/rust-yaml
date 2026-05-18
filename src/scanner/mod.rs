@@ -1044,17 +1044,39 @@ impl BasicScanner {
                 // folds to a space; N>1 consecutive newlines retain N-1;
                 // leading whitespace on the continuation line is excluded.
                 let mut newlines = 0usize;
+                // §6.1: tabs cannot be indentation. A continuation
+                // line that BEGINS with a tab (no leading spaces) in
+                // an enclosing block context is invalid (yaml-test-
+                // suite DK95/01). Tabs that appear AFTER spaces in
+                // the same indent area are content, not indentation.
+                let mut just_after_newline = false;
                 while let Some(c) = self.current_char {
                     match c {
                         '\n' => {
                             newlines += 1;
                             multi_line = true;
                             self.advance();
+                            just_after_newline = true;
                         }
                         '\r' => {
                             self.advance();
                         }
-                        ' ' | '\t' => {
+                        ' ' => {
+                            self.advance();
+                            just_after_newline = false;
+                        }
+                        '\t' if just_after_newline
+                            && self.flow_level == 0
+                            && (self.indent_stack.len() > 1
+                                || !self.compact_sequence_indents.is_empty()) =>
+                        {
+                            return Err(Error::scan(
+                                self.position,
+                                "Tab cannot serve as indentation of quoted scalar continuation"
+                                    .to_string(),
+                            ));
+                        }
+                        '\t' => {
                             self.advance();
                         }
                         _ => break,

@@ -1060,6 +1060,29 @@ impl BasicScanner {
                         _ => break,
                     }
                 }
+                // §8.1.4: a multi-line quoted scalar inside a block
+                // context must indent each continuation more than the
+                // enclosing block. \`quoted: "a\\nb"\` with \`b\` at col 1
+                // violates the rule because \`quoted:\` sits at indent 0
+                // (yaml-test-suite QB6E). Only fires when there IS an
+                // enclosing block (indent_stack > [0] or compact-seq
+                // active) — top-level quoted scalars with continuation
+                // at col 1 are legal.
+                if newlines > 0
+                    && self.flow_level == 0
+                    && (self.indent_stack.len() > 1
+                        || !self.compact_sequence_indents.is_empty())
+                    && !matches!(self.current_char, None | Some('\n' | '\r'))
+                {
+                    let parent_indent = self.indent_stack.last().copied().unwrap_or(0);
+                    let indent = self.position.column.saturating_sub(1);
+                    if indent <= parent_indent {
+                        return Err(Error::scan(
+                            self.position,
+                            "Quoted scalar continuation line is not indented enough".to_string(),
+                        ));
+                    }
+                }
                 // §6.8: a doc-start/end marker (`---` or `...`) at
                 // column 1 always terminates the current document.
                 // Encountering one inside an unterminated quoted

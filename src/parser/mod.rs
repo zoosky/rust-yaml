@@ -1417,12 +1417,22 @@ impl BasicParser {
                         // BlockEntry, the previous item had no value —
                         // synthesise an implicit empty scalar before
                         // accepting this new BlockEntry (yaml-test-suite
-                        // SM9W cluster).
-                        if matches!(self.last_token_type, Some(TokenType::BlockEntry)) {
+                        // SM9W cluster). Also synth when a pending
+                        // anchor/tag was left on a PREVIOUS line — the
+                        // property was the previous item's empty value
+                        // (yaml-test-suite PW8X).
+                        let last_was_block_entry =
+                            matches!(self.last_token_type, Some(TokenType::BlockEntry));
+                        let property_from_prev_line = (self.pending_anchor.is_some()
+                            || self.pending_tag.is_some())
+                            && self
+                                .pending_anchor_line
+                                .map_or(false, |a| a < token.start_position.line);
+                        if last_was_block_entry || property_from_prev_line {
                             self.events.push(Event::scalar(
                                 token.start_position,
-                                None,
-                                None,
+                                self.pending_anchor.take(),
+                                self.pending_tag.take(),
                                 String::new(),
                                 true,
                                 false,

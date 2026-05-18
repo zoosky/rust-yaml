@@ -1887,6 +1887,21 @@ impl BasicParser {
                         ));
                         self.state = ParserState::BlockMappingKey;
                     }
+                    ParserState::BlockMappingValue => {
+                        // §8.22: \`outer:\\n  ? complex\` — the outer
+                        // mapping's value is itself a block mapping
+                        // whose first key is a complex key. Open the
+                        // value mapping and transition to BlockMappingKey
+                        // (yaml-test-suite KK5P).
+                        self.state_stack.push(self.state);
+                        self.events.push(Event::mapping_start(
+                            token.start_position,
+                            self.pending_anchor.take(),
+                            self.pending_tag.take(),
+                            false,
+                        ));
+                        self.state = ParserState::BlockMappingKey;
+                    }
                     ParserState::BlockMappingKey | ParserState::FlowMappingKey => {
                         // A new `?` while we still owe a value for the
                         // previous key — synthesise an implicit empty

@@ -568,6 +568,25 @@ impl BasicParser {
                         ScalarStyle::Plain,
                     ));
                 }
+                // §6.9: a stand-alone anchor or tag at end-of-stream
+                // produces a document with a tagged/anchored empty
+                // scalar (yaml-test-suite UKK6/02 — a bare \`!\`).
+                if matches!(self.state, ParserState::ImplicitDocumentStart)
+                    && (self.pending_anchor.is_some() || self.pending_tag.is_some())
+                {
+                    let event = self.create_implicit_document_start(token.start_position);
+                    self.events.push(event);
+                    self.events.push(Event::scalar(
+                        token.start_position,
+                        self.pending_anchor.take(),
+                        self.pending_tag.take(),
+                        String::new(),
+                        true,
+                        false,
+                        ScalarStyle::Plain,
+                    ));
+                    self.state = ParserState::DocumentContent;
+                }
                 // Close any open document. A document is "open" in every
                 // state except: not-yet-started (StreamStart /
                 // ImplicitDocumentStart), or already closed (DocumentEnd /

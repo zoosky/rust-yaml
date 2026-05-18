@@ -1625,6 +1625,16 @@ impl BasicParser {
                             // invalid — block mappings cannot express
                             // nested implicit single-pair mappings
                             // inline (yaml-test-suite ZL4Z, ZCZ6).
+                            //
+                            // Carve-out: when the PREVIOUS `:` on this
+                            // line was an explicit value separator
+                            // (paired with `?`), the value position
+                            // legitimately holds an inline mapping
+                            // (yaml-test-suite V9D5 \`: moon: white\`
+                            // after \`? earth: blue\`). We detect this
+                            // by checking whether the synth'd empty key
+                            // (or any structural emission) happened on
+                            // THIS line — if so, allow.
                             let prev_was_scalar = matches!(
                                 self.last_token_type,
                                 Some(
@@ -1635,7 +1645,38 @@ impl BasicParser {
                             );
                             let same_line_as_prev_colon = prev_value_line
                                 .map_or(false, |line| line == token.start_position.line);
-                            if prev_was_scalar && same_line_as_prev_colon {
+                            // Walk back from the most recent event:
+                            // if the last scalar BEFORE the just-pushed
+                            // scalar is an EMPTY implicit scalar on
+                            // this line (the synth'd empty key from a
+                            // prior `:`), the prior `:` was structural
+                            // and this `:` is the inline mapping's
+                            // separator.
+                            let mut saw_synth_empty_on_this_line = false;
+                            let mut seen_value = 0;
+                            for ev in self.events.iter().rev() {
+                                if let EventType::Scalar {
+                                    value,
+                                    plain_implicit,
+                                    ..
+                                } = &ev.event_type
+                                {
+                                    if seen_value >= 1 {
+                                        if value.is_empty()
+                                            && *plain_implicit
+                                            && ev.position.line == token.start_position.line
+                                        {
+                                            saw_synth_empty_on_this_line = true;
+                                        }
+                                        break;
+                                    }
+                                    seen_value += 1;
+                                }
+                            }
+                            if prev_was_scalar
+                                && same_line_as_prev_colon
+                                && !saw_synth_empty_on_this_line
+                            {
                                 return Err(Error::parse(
                                     token.start_position,
                                     "Multiple `:` on the same line in block mapping",

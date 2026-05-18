@@ -1226,6 +1226,30 @@ impl BasicParser {
                     ));
                 }
 
+                // §8.22: in BlockSequence state, every item must be
+                // introduced by \`-\`. A Scalar arriving when the
+                // previous token was already a scalar / block-scalar
+                // / closed-flow-collection means \`- a\\n  b\` style —
+                // \`b\` is bogus content at the sequence's indent
+                // (yaml-test-suite 6S55).
+                if matches!(self.state, ParserState::BlockSequence)
+                    && matches!(
+                        self.last_token_type,
+                        Some(
+                            TokenType::Scalar(..)
+                                | TokenType::BlockScalarLiteral(..)
+                                | TokenType::BlockScalarFolded(..)
+                                | TokenType::FlowSequenceEnd
+                                | TokenType::FlowMappingEnd
+                        )
+                    )
+                {
+                    return Err(Error::parse(
+                        token.start_position,
+                        "Block sequence item must start with `-`",
+                    ));
+                }
+
                 // §7.4: in flow mapping/sequence between entries
                 // (even children = ready for next key/item) a Scalar
                 // must be preceded by a separator. If the previous

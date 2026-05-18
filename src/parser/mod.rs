@@ -1192,10 +1192,22 @@ impl BasicParser {
                             if matches!(self.state, ParserState::BlockMappingKey)
                                 && !self.explicit_key_pending
                             {
-                                return Err(Error::parse(
-                                    token.start_position,
-                                    "Mapping key not followed by `:`",
-                                ));
+                                // §8.22 carve-out: if the unmatched
+                                // 'key' is a collection node (the
+                                // inline-wrapped explicit-key from
+                                // yaml-test-suite M2N8), synth empty
+                                // value instead of erroring.
+                                let key_was_collection = matches!(
+                                    self.events.last().map(|e| &e.event_type),
+                                    Some(EventType::MappingEnd)
+                                        | Some(EventType::SequenceEnd)
+                                );
+                                if !key_was_collection {
+                                    return Err(Error::parse(
+                                        token.start_position,
+                                        "Mapping key not followed by `:`",
+                                    ));
+                                }
                             }
                             // §6.9: when synthesising the missing value
                             // for the last key, consume any pending
@@ -1681,13 +1693,39 @@ impl BasicParser {
                         // mapping (the explicit key node itself).
                         // Wrap retroactively by inserting an inner
                         // MappingStart before the just-emitted key
-                        // node. yaml-test-suite M2N8/00 \`- ? : x\`,
-                        // M2N8/01 \`? []: x\`.
+                        // node. yaml-test-suite M2N8/01 \`? []: x\`,
+                        // and the empty-prefix variant M2N8/00
+                        // \`- ? : x\`.
                         let odd_children =
                             innermost_mapping_has_odd_children(&self.events);
                         let key_marker_same_line = self
                             .last_key_marker_line
                             .map_or(false, |l| l == token.start_position.line);
+                        // Empty-prefix variant: `?` then `:` directly
+                        // (no node between). Open inner mapping with
+                        // empty key and transition to inner value.
+                        if !odd_children && key_marker_same_line {
+                            self.state_stack.push(self.state);
+                            self.events.push(Event::mapping_start(
+                                token.start_position,
+                                None,
+                                None,
+                                false,
+                            ));
+                            self.events.push(Event::scalar(
+                                token.start_position,
+                                None,
+                                None,
+                                String::new(),
+                                true,
+                                false,
+                                ScalarStyle::Plain,
+                            ));
+                            self.last_key_marker_line = None;
+                            self.state = ParserState::BlockMappingValue;
+                            self.last_token_type = token_type_for_tracking;
+                            return Ok(());
+                        }
                         if odd_children && key_marker_same_line {
                             // Find the most recent emitted KEY-position
                             // node within the active mapping (it'll be

@@ -2327,6 +2327,9 @@ impl BasicScanner {
     fn scan_block_scalar_header(&mut self) -> Result<(ChompingMode, Option<usize>)> {
         let mut chomping = ChompingMode::Clip;
         let mut explicit_indent: Option<usize> = None;
+        // §6.6: a comment must be preceded by whitespace. \`|#x\` and
+        // \`>#x\` are invalid (yaml-test-suite X4QW).
+        let mut seen_separator_ws = false;
 
         // Parse indicators in any order
         while let Some(ch) = self.current_char {
@@ -2370,9 +2373,17 @@ impl BasicScanner {
                     self.advance();
                 }
                 ' ' | '\t' => {
+                    seen_separator_ws = true;
                     self.advance(); // Skip whitespace
                 }
                 '#' => {
+                    if !seen_separator_ws {
+                        return Err(Error::scan(
+                            self.position,
+                            "Comment in block-scalar header must be preceded by whitespace"
+                                .to_string(),
+                        ));
+                    }
                     // Skip comment to end of line
                     while let Some(ch) = self.current_char {
                         self.advance();

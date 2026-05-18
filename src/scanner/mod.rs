@@ -1722,6 +1722,17 @@ impl BasicScanner {
                         .push(Token::new(TokenType::FlowMappingEnd, pos, self.position));
                 }
                 ',' => {
+                    // §7.4: \`,\` is a flow indicator. Outside flow
+                    // context it's not meaningful as a structural
+                    // separator (yaml-test-suite U99R: \`- !!str, xxx\`
+                    // — the comma after a tag in block context is
+                    // invalid).
+                    if self.flow_level == 0 {
+                        return Err(Error::scan(
+                            self.position,
+                            "Unexpected `,` outside flow context".to_string(),
+                        ));
+                    }
                     let pos = self.position;
                     self.advance();
                     self.tokens
@@ -2369,11 +2380,18 @@ impl BasicScanner {
             // `,`, `[`, `]`, `{`, `}` always terminate a node — so we
             // must NOT consume them into the tag suffix even though
             // RFC 3986 permits them in URIs (yaml-test-suite WZ62).
+            // YAML 1.2 in practice treats `,` as a flow indicator that
+            // must be percent-encoded (\`%2C\`) when it appears inside
+            // a tag suffix — bare \`,\` is not allowed in EITHER block
+            // or flow context (yaml-test-suite U99R).
             while let Some(ch) = self.current_char {
-                if self.flow_level > 0 && matches!(ch, ',' | '[' | ']' | '{' | '}') {
+                if matches!(ch, ',') {
                     break;
                 }
-                if ch.is_alphanumeric() || "-._~:/?#[]@!$&'()*+,;=%".contains(ch) {
+                if self.flow_level > 0 && matches!(ch, '[' | ']' | '{' | '}') {
+                    break;
+                }
+                if ch.is_alphanumeric() || "-._~:/?#[]@!$&'()*+;=%".contains(ch) {
                     tag.push(ch);
                     self.advance();
                 } else {

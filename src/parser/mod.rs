@@ -1559,6 +1559,11 @@ impl BasicParser {
             }
 
             TokenType::Value => {
+                // Snapshot the PREVIOUS Value token's line BEFORE
+                // updating to the current one. The match arms below
+                // need this to detect multi-`:`-on-same-line (yaml-
+                // test-suite ZL4Z, ZCZ6).
+                let prev_value_line = self.last_value_token_line;
                 self.last_value_token_line = Some(token.start_position.line);
                 self.explicit_key_pending = false;
                 // YAML 1.2 §6.9.1: a `:` with no preceding key implies an
@@ -1612,7 +1617,30 @@ impl BasicParser {
                         self.state = ParserState::BlockMappingValue;
                     }
                     ParserState::BlockMappingKey => {
-                        if !innermost_mapping_has_odd_children(&self.events) {
+                        let even_children =
+                            !innermost_mapping_has_odd_children(&self.events);
+                        if even_children {
+                            // §8.22: two implicit \`:\` on the same line
+                            // in a block mapping (e.g. \`a: 'b': c\`) is
+                            // invalid — block mappings cannot express
+                            // nested implicit single-pair mappings
+                            // inline (yaml-test-suite ZL4Z, ZCZ6).
+                            let prev_was_scalar = matches!(
+                                self.last_token_type,
+                                Some(
+                                    TokenType::Scalar(..)
+                                        | TokenType::BlockScalarLiteral(..)
+                                        | TokenType::BlockScalarFolded(..)
+                                )
+                            );
+                            let same_line_as_prev_colon = prev_value_line
+                                .map_or(false, |line| line == token.start_position.line);
+                            if prev_was_scalar && same_line_as_prev_colon {
+                                return Err(Error::parse(
+                                    token.start_position,
+                                    "Multiple `:` on the same line in block mapping",
+                                ));
+                            }
                             // Missing key — synthesise empty scalar
                             // first. Pending anchor/tag belongs to that
                             // empty key (yaml-test-suite PW8X).

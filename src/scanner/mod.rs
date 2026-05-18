@@ -1777,6 +1777,16 @@ impl BasicScanner {
                         .push(Token::new(TokenType::Value, pos, self.position));
                 }
 
+                // §6.2: the explicit-key marker \`?\` must be followed
+                // by a SPACE (or EOL), not a tab. Tab as separator
+                // after \`?\` is invalid (yaml-test-suite Y79Y/006, /008).
+                '?' if self.flow_level == 0 && self.peek_char(1) == Some('\t') => {
+                    return Err(Error::scan(
+                        self.position,
+                        "Tab cannot follow `?` as block-key separator".to_string(),
+                    ));
+                }
+
                 // Explicit key marker. An indented `?` at line-start
                 // (e.g. `mapping:\\n  ? key`) opens an implicit block
                 // mapping at this column — same as a line-start scalar

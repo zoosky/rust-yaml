@@ -1779,6 +1779,53 @@ impl BasicParser {
                         self.state = ParserState::FlowMappingValue;
                     }
                     ParserState::FlowSequence => {
+                        // §7.5: \`[ {k:v}:value ]\` — a closed flow
+                        // collection followed by \`:\` makes that flow
+                        // node the implicit key. Retroactively wrap
+                        // it in an implicit single-pair mapping by
+                        // inserting MappingStart BEFORE the matching
+                        // flow-open event (yaml-test-suite 9MMW).
+                        let last_is_flow_close = matches!(
+                            self.events.last().map(|e| &e.event_type),
+                            Some(EventType::MappingEnd) | Some(EventType::SequenceEnd)
+                        );
+                        if last_is_flow_close {
+                            // Find the matching open via depth walk.
+                            let mut depth = 0i32;
+                            let mut open_idx = None;
+                            for (idx, ev) in self.events.iter().enumerate().rev() {
+                                match &ev.event_type {
+                                    EventType::MappingEnd | EventType::SequenceEnd => {
+                                        depth += 1;
+                                    }
+                                    EventType::MappingStart { flow_style: true, .. }
+                                    | EventType::SequenceStart { flow_style: true, .. } => {
+                                        depth -= 1;
+                                        if depth == 0 {
+                                            open_idx = Some(idx);
+                                            break;
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            if let Some(oi) = open_idx {
+                                self.state_stack.push(self.state);
+                                self.events.insert(
+                                    oi,
+                                    Event::mapping_start(
+                                        self.events[oi].position,
+                                        None,
+                                        None,
+                                        true,
+                                    ),
+                                );
+                                self.state = ParserState::FlowMappingValue;
+                                self.implicit_flow_pair_depth += 1;
+                                self.last_token_type = token_type_for_tracking;
+                                return Ok(());
+                            }
+                        }
                         // §7.5: `[ : value ]` — leading `:` with no
                         // preceding scalar implies an empty key for an
                         // implicit single-pair flow mapping

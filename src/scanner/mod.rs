@@ -2844,6 +2844,19 @@ impl BasicScanner {
                     } else {
                         content_indent = line_indent;
                     }
+                    // §8.1.2.1: leading blank lines may not exceed the
+                    // detected content indent — that ambiguity is
+                    // invalid (yaml-test-suite W9L4, S98Z).
+                    if max_blank_indent > content_indent {
+                        self.position = saved_position;
+                        self.current_char = saved_char;
+                        self.current_char_index = saved_char_index;
+                        return Err(Error::scan(
+                            self.position,
+                            "Block scalar leading blank-line indent exceeds content indent"
+                                .to_string(),
+                        ));
+                    }
                     found = true;
                     break;
                 }

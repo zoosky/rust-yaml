@@ -952,6 +952,34 @@ impl BasicScanner {
                         _ => break,
                     }
                 }
+                // §6.8: a doc-start/end marker (`---` or `...`) at
+                // column 1 always terminates the current document.
+                // Encountering one inside an unterminated quoted
+                // scalar is invalid — the quote escapes nothing past
+                // the doc boundary (yaml-test-suite 5TRB, RXY3,
+                // 9MQT/01).
+                if self.position.column == 1 {
+                    let next3: String = self
+                        .char_cache
+                        .get(self.current_char_index..self.current_char_index + 3)
+                        .map(|s| s.iter().collect())
+                        .unwrap_or_default();
+                    if (next3 == "---" || next3 == "...")
+                        && self
+                            .char_cache
+                            .get(self.current_char_index + 3)
+                            .map_or(true, |c| c.is_whitespace())
+                    {
+                        return Err(Error::scan(
+                            self.position,
+                            format!(
+                                "Document {} marker `{}` inside quoted scalar",
+                                if next3 == "---" { "start" } else { "end" },
+                                next3
+                            ),
+                        ));
+                    }
+                }
                 // Drop trailing whitespace on the prior line (the bytes
                 // we already pushed) before applying the fold. Don't
                 // strip past `escape_end` — escape-produced whitespace

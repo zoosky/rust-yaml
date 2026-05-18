@@ -1045,7 +1045,16 @@ impl BasicParser {
                         // scalar that is the final sequence item
                         // (yaml-test-suite LE5A: \`- !!str\` produces
                         // a tagged empty scalar before -SEQ).
-                        if self.pending_anchor.is_some() || self.pending_tag.is_some() {
+                        // §6.9.1: also if the previous token was
+                        // BlockEntry with no item between — the last
+                        // entry was an implicit empty (yaml-test-suite
+                        // SM9W cluster).
+                        let last_was_block_entry =
+                            matches!(self.last_token_type, Some(TokenType::BlockEntry));
+                        if self.pending_anchor.is_some()
+                            || self.pending_tag.is_some()
+                            || last_was_block_entry
+                        {
                             self.events.push(Event::scalar(
                                 token.start_position,
                                 self.pending_anchor.take(),
@@ -1355,8 +1364,23 @@ impl BasicParser {
                 // We need to ensure proper state management for nested structures
                 match self.state {
                     ParserState::BlockSequence => {
-                        // We're already in a sequence, this is a new item
-                        // No event needed, but we should be ready for the next item
+                        // We're already in a sequence, this is a new item.
+                        // §6.9.1: if the previous token was also a
+                        // BlockEntry, the previous item had no value —
+                        // synthesise an implicit empty scalar before
+                        // accepting this new BlockEntry (yaml-test-suite
+                        // SM9W cluster).
+                        if matches!(self.last_token_type, Some(TokenType::BlockEntry)) {
+                            self.events.push(Event::scalar(
+                                token.start_position,
+                                None,
+                                None,
+                                String::new(),
+                                true,
+                                false,
+                                ScalarStyle::Plain,
+                            ));
+                        }
                     }
                     ParserState::BlockMapping | ParserState::BlockMappingValue => {
                         // If we encounter a BlockEntry while in a mapping,
@@ -1734,6 +1758,21 @@ impl BasicParser {
                         } else {
                             ParserState::FlowMappingKey
                         };
+                    }
+                    ParserState::FlowSequence => {
+                        // §7.5: `[? key : value, ...]` — the `?`
+                        // opens an implicit single-pair flow mapping
+                        // with an explicit complex key (yaml-test-
+                        // suite CT4Q).
+                        self.state_stack.push(self.state);
+                        self.events.push(Event::mapping_start(
+                            token.start_position,
+                            None,
+                            None,
+                            true,
+                        ));
+                        self.state = ParserState::FlowMappingKey;
+                        self.implicit_flow_pair_depth += 1;
                     }
                     ParserState::BlockMappingKey | ParserState::FlowMappingKey => {
                         // A new `?` while we still owe a value for the

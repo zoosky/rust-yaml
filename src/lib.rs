@@ -507,6 +507,38 @@ prod: *base
         );
     }
 
+    /// A block-entry marker `-` without a following item denotes an
+    /// implicit empty scalar item. Two `- ` markers in a row mean the
+    /// first item is empty, and a single `-` followed by EOF/BlockEnd
+    /// means the only item is empty. yaml-test-suite SM9W cluster.
+    #[test]
+    fn test_block_entry_no_item_synthesises_empty_scalar() {
+        let yaml = "-\n";
+        let mut parser = BasicParser::new_eager(yaml.to_string());
+        let mut events = Vec::new();
+        while parser.check_event() {
+            match parser.get_event() {
+                Ok(Some(event)) => events.push(event),
+                Ok(None) => break,
+                Err(e) => panic!("parser error: {e:?}"),
+            }
+        }
+        let scalars: Vec<(String, bool)> = events
+            .iter()
+            .filter_map(|e| match &e.event_type {
+                EventType::Scalar { value, plain_implicit, .. } => {
+                    Some((value.clone(), *plain_implicit))
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            scalars,
+            vec![(String::new(), true)],
+            "Expected one implicit empty scalar item; got {scalars:?}"
+        );
+    }
+
     /// YAML 1.2 §6.1 allows mixed indent widths: e.g. one key uses 2-space
     /// indent, a sibling uses 3-space. As long as children indent FURTHER
     /// than parents, any positive amount works. yaml-test-suite 6HB6 et al.

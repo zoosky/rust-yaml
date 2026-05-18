@@ -3,7 +3,7 @@
 #![allow(clippy::redundant_closure)]
 #![allow(clippy::needless_raw_string_hashes)]
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use indexmap::IndexMap;
 use rust_yaml::{Value, Yaml};
 

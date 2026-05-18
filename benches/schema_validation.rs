@@ -1,6 +1,6 @@
 //! Performance benchmarks for schema validation
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use indexmap::IndexMap;
 use regex::Regex;
 use rust_yaml::{Schema, SchemaRule, SchemaValidator, Value, ValueType, Yaml};

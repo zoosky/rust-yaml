@@ -1,6 +1,6 @@
 //! Comprehensive benchmarks for comment preservation features
 
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use rust_yaml::{CommentedValue, Comments, LoaderType, Style, Value, Yaml, YamlConfig};
 
 fn bench_comment_parsing_performance(c: &mut Criterion) {

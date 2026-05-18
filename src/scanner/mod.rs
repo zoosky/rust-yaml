@@ -2232,9 +2232,16 @@ impl BasicScanner {
                     self.tokens.push(token);
                 }
                 '*' => {
+                    // §6.9.2: alias/anchor names may contain \`:\` (only
+                    // flow indicators and whitespace terminate them).
+                    // So \`*a:\` is an alias named \`a:\`, NOT an alias
+                    // \`*a\` followed by a key separator. Don't open
+                    // an implicit block mapping in that case (yaml-
+                    // test-suite 2SXE).
                     if self.flow_level == 0
                         && self.position.column == self.current_indent + 1
                         && self.check_for_mapping_ahead()
+                        && !self.colon_belongs_to_alias_anchor_name()
                     {
                         self.maybe_open_block_mapping_for_key()?;
                     }
@@ -3303,6 +3310,40 @@ impl BasicScanner {
     /// are scanned past (including `''` and `\"` escapes) before looking
     /// for the `: ` that would make this scalar a key. This handles
     /// yaml-test-suite 6H3V (`'foo: bar\': baz'`) and 6SLA.
+    /// For an alias/anchor at the current position, scan past
+    /// the `&`/`*` and the name characters; if the FIRST char that
+    /// would terminate the name is `:`, the colon is PART of the
+    /// alias/anchor name (yaml-test-suite 2SXE). Returns true in
+    /// that case so the caller can skip the implicit-key fast-path.
+    fn colon_belongs_to_alias_anchor_name(&self) -> bool {
+        // Start after the `&` / `*` introducer.
+        let mut i = self.current_char_index + 1;
+        let n = self.char_cache.len();
+        // Per scan_identifier rules: stop at whitespace or flow indicator.
+        while i < n {
+            let c = self.char_cache[i];
+            if c.is_whitespace() || matches!(c, ',' | '[' | ']' | '{' | '}') {
+                break;
+            }
+            i += 1;
+        }
+        // If the next char (or last consumed?) at termination is `:`,
+        // then the name ended with `:`. Look at the LAST consumed
+        // char. Actually our scan_identifier accepts `:` as part of
+        // name — so the colon is already in the name. There's no
+        // separate "value indicator" colon after.
+        //
+        // For the implicit-key fast path to be wrong, we need the
+        // name to END with `:` (last char of name is `:`).
+        if i > self.current_char_index + 1 {
+            let last_name_char = self.char_cache[i - 1];
+            if last_name_char == ':' {
+                return true;
+            }
+        }
+        false
+    }
+
     /// Scan ahead on the current line (the rest of the post-indent
     /// content) to determine whether it looks like an implicit
     /// mapping key — i.e. has a `: ` separator (or `:` at line end)

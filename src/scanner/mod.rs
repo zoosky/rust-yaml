@@ -2685,6 +2685,19 @@ impl BasicScanner {
                 line_indent += 1;
                 self.advance();
             }
+            // §6.1 + §8.1: tabs cannot serve as block-scalar
+            // indentation. A line that BEGINS with a tab (no leading
+            // spaces) inside the block scalar's indent search is
+            // invalid (yaml-test-suite Y79Y/000 \`foo: |\\n\\tbar\`).
+            // Tabs that appear AFTER one or more spaces are content,
+            // not indentation, and remain valid (yaml-test-suite
+            // 96NN/00 \`foo: |-\\n \\tbar\`).
+            if line_indent == 0 && self.current_char == Some('\t') {
+                return Err(Error::scan(
+                    self.position,
+                    "Tab cannot serve as block-scalar indentation".to_string(),
+                ));
+            }
 
             match self.current_char {
                 None => {

@@ -742,15 +742,26 @@ impl BasicScanner {
             //   * Flow context: no column rule, only flow indicators
             //     terminate (8KB6, 8UDB, 9BXH).
             //   * Block context: must be strictly deeper than the parent
-            //     block's key column. For a mapping at indent N, keys
-            //     sit at column N+1; continuation must be at column
-            //     >= N+2 (yaml-test-suite 36F6: `plain: a\n b\n\n c`).
+            //     block's key column. The parent indent is the max of
+            //     `indent_stack.last()` (block mapping/sequence indent)
+            //     and `compact_sequence_indents.last()` — the latter
+            //     tracks sequences opened compactly (e.g. `? - x` where
+            //     the dash didn't push to indent_stack). Without the
+            //     compact-stack check, `? - Detroit Tigers\n  - Chicago`
+            //     would fold both lines into one scalar (yaml-test-
+            //     suite M5DY).
             //     Fall back to `next_col >= start_col` for top-level
             //     scalars where there's no enclosing block.
             let column_ok = if self.flow_level > 0 {
                 true
             } else {
-                let parent_indent = self.indent_stack.last().copied().unwrap_or(0);
+                let block_indent = self.indent_stack.last().copied().unwrap_or(0);
+                let compact_indent = self
+                    .compact_sequence_indents
+                    .last()
+                    .copied()
+                    .unwrap_or(0);
+                let parent_indent = block_indent.max(compact_indent);
                 next_col >= parent_indent + 2 || next_col >= start_col
             };
             let can_continue = next_ch.is_some()
@@ -1700,7 +1711,18 @@ impl BasicScanner {
                     // Check if we need to start a new block sequence
                     let last_indent = *self.indent_stack.last().unwrap();
 
-                    if self.current_indent > last_indent {
+                    // If a compact sequence (opened from `? - x` or
+                    // similar) is already active at this dash's column,
+                    // the dash continues it — don't open a new nested
+                    // block sequence (yaml-test-suite M5DY).
+                    let dash_indent = pos.column.saturating_sub(1);
+                    let compact_active_here = self
+                        .compact_sequence_indents
+                        .last()
+                        .map_or(false, |&si| si == dash_indent);
+                    if compact_active_here {
+                        // Continuation of an existing compact sequence.
+                    } else if self.current_indent > last_indent {
                         // Deeper indentation - start new nested sequence
                         self.indent_stack.push(self.current_indent);
                         self.indent_is_sequence.push(true);
@@ -1718,13 +1740,22 @@ impl BasicScanner {
                         // Same or root level — compact notation.
                         // Start a new sequence only if we don't already have one
                         // tracked at this exact indent.
+                        // For a dash that's *not* at line-start (e.g.
+                        // `? - x` where current_indent is still the
+                        // line's indent but the dash sits in mid-line),
+                        // use the dash column - 1 as the sequence's
+                        // indent so scan_plain_scalar's continuation
+                        // check correctly sees the deeper context
+                        // (yaml-test-suite M5DY).
+                        let dash_indent = pos.column.saturating_sub(1);
+                        let seq_indent = dash_indent.max(self.current_indent);
                         let has_active_compact = self
                             .compact_sequence_indents
                             .last()
-                            .map_or(false, |&si| si == self.current_indent);
+                            .map_or(false, |&si| si == seq_indent);
 
                         if !has_active_compact {
-                            self.compact_sequence_indents.push(self.current_indent);
+                            self.compact_sequence_indents.push(seq_indent);
                             // Check depth limit
                             self.resource_tracker.check_depth(
                                 &self.limits,

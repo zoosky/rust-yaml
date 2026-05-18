@@ -4,7 +4,13 @@
 
 This roadmap outlines the planned improvements and enhancements for rust-yaml, focusing on YAML 1.2 specification compliance, performance, security, and code quality.
 
-## Current Status (2025-08-16)
+## Current Status (2026-05-18)
+
+> 🎯 **100% upstream yaml-test-suite conformance achieved** —
+> 735 / 735 spec-conformance tests pass against the
+> [`yaml/yaml-test-suite`](https://github.com/yaml/yaml-test-suite)
+> `data-2022-01-17` pin. See
+> [`YAML_CONFORMANCE_ROADMAP.md`](YAML_CONFORMANCE_ROADMAP.md).
 
 ### ✅ Fully Implemented & Production Ready
 
@@ -34,14 +40,24 @@ This roadmap outlines the planned improvements and enhancements for rust-yaml, f
 
 **Development Infrastructure**
 
-- 134+ unit tests passing
-- 16+ integration tests passing
+- 185+ lib unit tests passing
+- 200+ integration tests passing
+- **735 / 735 yaml-test-suite conformance tests passing (100.0%)**
 - Comprehensive security test suite
 - Performance benchmarks
 - 60+ Makefile commands for development
 - CI/CD pipeline with multi-platform testing
 
-### ✅ Recently Completed (2025-08-16)
+### ✅ Recently Completed (2026-05-18)
+
+- **100% yaml-test-suite conformance** (735 / 735) achieved across
+  68 TDD-driven fixes covering line-start property handling,
+  state-machine completeness, indent rules, explicit-key wrapping,
+  flow-collection-as-key, and inline single-pair mapping wraps.
+- Strict clippy gate (`-D warnings -D pedantic` with curated allow-list)
+  now blocking — every fix must pass `make ci` before merge.
+
+### ✅ Earlier (2025-08-16)
 
 - Security hardening with resource limits
 - Streaming support with configurable buffers
@@ -53,8 +69,7 @@ This roadmap outlines the planned improvements and enhancements for rust-yaml, f
 ### ❌ Future Enhancements
 
 - Full Unicode normalization
-- Schema validation framework
-- Comment preservation during editing
+- Comment preservation during editing (round-trip already done; in-place edits still open)
 - Language server protocol support
 
 ## Priority 1: YAML 1.2 Specification Compliance 🎯
@@ -141,10 +156,10 @@ This roadmap outlines the planned improvements and enhancements for rust-yaml, f
 
 ### 3.3 Validation
 
-- [ ] Add schema validation support
-- [ ] Implement custom validation rules
-- [ ] Add type checking at parse time
-- [ ] Support JSON Schema validation
+- [x] Add schema validation support (`src/schema.rs`: AllOf/AnyOf/OneOf/Not, conditional, custom predicates)
+- [x] Support JSON Schema validation (`tests/schema_validation.rs`, `benches/schema_validation.rs`)
+- [ ] Implement custom validation rules (extensible registry beyond the current `Custom` predicate)
+- [ ] Add type checking at parse time (validate while events are emitted, not post-construction)
 
 ## Priority 4: Code Quality & Architecture 🏗️
 
@@ -166,7 +181,7 @@ This roadmap outlines the planned improvements and enhancements for rust-yaml, f
 
 #### Single Responsibility Principle (SRP)
 
-- [ ] Split `BasicScanner` (2000+ lines) into smaller components
+- [ ] Split `BasicScanner` (now 4000+ lines in `src/scanner/mod.rs`) into smaller components
 - [ ] Separate parsing logic from state management
 - [ ] Extract validation logic from core components
 
@@ -219,7 +234,7 @@ This roadmap outlines the planned improvements and enhancements for rust-yaml, f
 - [ ] Achieve >90% code coverage
 - [ ] Add fuzzing tests
 - [ ] Implement property-based testing
-- [ ] Add YAML test suite compliance tests
+- [x] Add YAML test suite compliance tests (735/735 against `yaml/yaml-test-suite` `data-2022-01-17`; harness in `yaml-test-suite/`, run via `make test-yaml-suite`)
 - [ ] Create integration tests with popular frameworks
 
 ## Priority 6: Advanced Features 🔧
@@ -257,8 +272,8 @@ This roadmap outlines the planned improvements and enhancements for rust-yaml, f
 
 ### Phase 1: Q4 2025
 
-- Schema validation framework
-- Full serde integration
+- Schema validation framework ✅ (`src/schema.rs`)
+- Full serde integration (still a 28-line stub in `src/serde_integration.rs`)
 - Enhanced error recovery
 - Developer experience improvements
 
@@ -290,10 +305,10 @@ This roadmap outlines the planned improvements and enhancements for rust-yaml, f
 We welcome contributions! Priority areas for contributors:
 
 1. **Immediate needs**:
-   - Schema validation framework
-   - Full serde integration
-   - Enhanced error recovery
+   - Full serde integration (current `serde_integration.rs` is a stub)
+   - Enhanced error recovery and partial-document recovery
    - Performance regression testing
+   - Re-enable `scanner::optimizations` / `parser::optimizations` (currently commented out)
 
 2. **Good first issues**:
    - Adding more comprehensive tests
@@ -325,5 +340,5 @@ Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ---
 
-_Last updated: 2025-08-16_
-_Next review: 2025-10-16_
+_Last updated: 2026-05-18_
+_Next review: 2026-07-18_

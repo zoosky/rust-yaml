@@ -8,7 +8,7 @@
 
 A complete, fast, and safe YAML 1.2 library for Rust with advanced features and security-first design. This library provides comprehensive YAML processing capabilities with full specification compliance, advanced security features, and excellent performance.
 
-> **Status**: Production-ready with comprehensive test coverage (134 unit tests + 150+ integration tests passing). All YAML 1.2 core features implemented and battle-tested.
+> **Status**: Production-ready. **100% conformant** against the upstream [`yaml/yaml-test-suite`](https://github.com/yaml/yaml-test-suite) (`data-2022-01-17` pin) — **735 / 735** spec-conformance tests pass. 185 internal lib tests + 200+ integration tests also passing. All YAML 1.2 core features implemented and battle-tested.
 
 ## Table of Contents
 
@@ -234,7 +234,7 @@ let yaml_with_complex_keys = r#"
 ? [name, age]
 : [John, 30]
 
-# Mapping as a key  
+# Mapping as a key
 ? {first: Alice, last: Smith}
 : person_data
 
@@ -405,7 +405,7 @@ cargo test --features large-documents
 
 ```toml
 [dependencies]
-rust-yaml = { version = "0.0.5", features = ["serde", "large-documents"] }
+rust-yaml = { version = "1.0.0", features = ["serde", "large-documents"] }
 ```
 
 - **`default = ["mmap", "preserve-order"]`**: Default feature set with memory mapping and order preservation
@@ -460,16 +460,16 @@ rust-yaml = { version = "0.0.5", features = ["serde", "large-documents"] }
 
 - ✅ **Infrastructure complete** - CommentedValue, RoundTripConstructor, comment-aware scanner
 - ✅ **API available** - `load_str_with_comments()`, `dump_str_with_comments()`
-- ✅ **Comment correlation** - Comments properly correlated with parsed values  
+- ✅ **Comment correlation** - Comments properly correlated with parsed values
 - ✅ **Full round-trip** - Comments preserved during parse/serialize cycle
 - ✅ **All comment types** - Leading, trailing, and inner comments supported
 
 ```rust
 // Full comment preservation example
-let config = YamlConfig { 
-    preserve_comments: true, 
-    loader_type: LoaderType::RoundTrip, 
-    ..Default::default() 
+let config = YamlConfig {
+    preserve_comments: true,
+    loader_type: LoaderType::RoundTrip,
+    ..Default::default()
 };
 let yaml = Yaml::with_config(config);
 
@@ -500,13 +500,13 @@ use std::collections::HashMap;
 
 // Create comprehensive schema
 let mut properties = HashMap::new();
-properties.insert("name".to_string(), 
+properties.insert("name".to_string(),
     Schema::with_type(ValueType::String)
         .rule(SchemaRule::Length { min: Some(1), max: Some(100) }));
-properties.insert("email".to_string(), 
+properties.insert("email".to_string(),
     Schema::with_type(ValueType::String)
         .rule(SchemaRule::Pattern(Regex::new(r"^[^@]+@[^@]+\.[^@]+$").unwrap())));
-properties.insert("age".to_string(), 
+properties.insert("age".to_string(),
     Schema::with_type(ValueType::Integer)
         .rule(SchemaRule::Range { min: Some(0.0), max: Some(150.0) }));
 

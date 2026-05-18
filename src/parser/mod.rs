@@ -1186,6 +1186,22 @@ impl BasicParser {
                                 ScalarStyle::Plain,
                             ));
                         }
+                        // If the pending-property flush above just
+                        // emitted a KEY (leaving odd children), we
+                        // still need the missing implicit empty
+                        // VALUE before closing the mapping (yaml-
+                        // test-suite PW8X \`? &d\` close case).
+                        if innermost_mapping_has_odd_children(&self.events) {
+                            self.events.push(Event::scalar(
+                                token.start_position,
+                                None,
+                                None,
+                                String::new(),
+                                true,
+                                false,
+                                ScalarStyle::Plain,
+                            ));
+                        }
                         self.events.push(Event::mapping_end(token.start_position));
                         // Pop previous state from stack if available
                         if let Some(prev_state) = self.state_stack.pop() {

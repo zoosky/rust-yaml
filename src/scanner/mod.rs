@@ -1983,8 +1983,33 @@ impl BasicScanner {
                     self.tokens
                         .push(Token::new(TokenType::BlockEntry, pos, self.position));
 
-                    // After emitting BlockEntry, check if the next token is another dash (nested sequence)
-                    self.skip_whitespace();
+                    // After emitting BlockEntry, check if the next
+                    // token is another dash (nested sequence). §6.2
+                    // requires SPACE separation between dashes — a
+                    // tab between the outer and inner \`-\` is invalid
+                    // (yaml-test-suite Y79Y/004, /005). Track whether
+                    // a tab was consumed while skipping the inter-
+                    // dash whitespace and reject if so.
+                    let mut saw_tab_between = false;
+                    while let Some(c) = self.current_char {
+                        if c == ' ' {
+                            self.advance();
+                        } else if c == '\t' {
+                            saw_tab_between = true;
+                            self.advance();
+                        } else {
+                            break;
+                        }
+                    }
+                    if self.current_char == Some('-')
+                        && self.peek_char(1).map_or(true, |c| c.is_whitespace())
+                        && saw_tab_between
+                    {
+                        return Err(Error::scan(
+                            self.position,
+                            "Tab between block-entries on same line".to_string(),
+                        ));
+                    }
                     if self.current_char == Some('-')
                         && self.peek_char(1).map_or(true, |c| c.is_whitespace())
                     {

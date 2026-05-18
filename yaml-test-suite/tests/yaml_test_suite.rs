@@ -126,12 +126,18 @@ fn write_failure_report(failures: &[String]) {
     }
 
     let mut out = String::new();
-    out.push_str(&format!("# yaml-test-suite failures ({} total)\n\n", failures.len()));
+    out.push_str(&format!(
+        "# yaml-test-suite failures ({} total)\n\n",
+        failures.len()
+    ));
 
     let sections: &[(&str, &Vec<&str>)] = &[
         ("Timeouts (parser hangs)", &timeouts),
         ("Wrong reject (parser failed on valid YAML)", &wrong_reject),
-        ("Wrong accept (parser succeeded on invalid YAML)", &wrong_accept),
+        (
+            "Wrong accept (parser succeeded on invalid YAML)",
+            &wrong_accept,
+        ),
         ("Wrong events (parsed but tree differs)", &wrong_events),
     ];
     for (title, items) in sections {

@@ -120,7 +120,10 @@ mod tests {
         let expected = vec!["+STR".to_string(), "wrong".to_string()];
         let tc = case("42", false, expected);
         let reason = expect_fail(run_test(&tc));
-        assert!(reason.contains("expected:"), "diff format missing: {reason}");
+        assert!(
+            reason.contains("expected:"),
+            "diff format missing: {reason}"
+        );
         assert!(reason.contains("actual:"), "diff format missing: {reason}");
     }
 

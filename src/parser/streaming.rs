@@ -4,10 +4,10 @@
 //! reducing memory usage and improving performance for large documents.
 
 use crate::{
-    parser::{Event, Parser, ParserState},
-    zerocopy::ScannerStats,
     BasicScanner, Error, Position, Result, Scanner, Token, TokenType, ZeroScanner, ZeroToken,
     ZeroTokenType,
+    parser::{Event, Parser, ParserState},
+    zerocopy::ScannerStats,
 };
 use std::collections::VecDeque;
 

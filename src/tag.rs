@@ -172,7 +172,10 @@ impl TagResolver {
                 .get("!!")
                 .cloned()
                 .unwrap_or_else(|| "tag:yaml.org,2002:".to_string());
-            (format!("{}{}", prefix, percent_decode(suffix)), tag_str.to_string())
+            (
+                format!("{}{}", prefix, percent_decode(suffix)),
+                tag_str.to_string(),
+            )
         } else if tag_str.starts_with('!') {
             // Check for named handle
             if let Some(end) = tag_str[1..].find('!') {
@@ -181,7 +184,10 @@ impl TagResolver {
                 let suffix = &tag_str[end + 2..];
 
                 if let Some(prefix) = self.directives.get(&handle) {
-                    (format!("{}{}", prefix, percent_decode(suffix)), tag_str.to_string())
+                    (
+                        format!("{}{}", prefix, percent_decode(suffix)),
+                        tag_str.to_string(),
+                    )
                 } else {
                     // §6.8: a named-handle tag must reference a
                     // declared \`%TAG\` directive in the current
@@ -200,7 +206,10 @@ impl TagResolver {
                     .get("!")
                     .cloned()
                     .unwrap_or_else(|| "!".to_string());
-                (format!("{}{}", prefix, percent_decode(suffix)), tag_str.to_string())
+                (
+                    format!("{}{}", prefix, percent_decode(suffix)),
+                    tag_str.to_string(),
+                )
             }
         } else {
             // No tag prefix, use implicit tagging based on schema
@@ -318,7 +327,7 @@ impl TagResolver {
 
     /// Construct binary data from a tagged value (base64)
     fn construct_binary(&self, value: &str) -> Result<Value> {
-        use base64::{engine::general_purpose::STANDARD, Engine as _};
+        use base64::{Engine as _, engine::general_purpose::STANDARD};
 
         // Remove whitespace from base64 string
         let clean = value

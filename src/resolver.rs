@@ -33,8 +33,10 @@ pub enum PlainScalarType {
 /// which is tracked as a separate Core Schema gap.
 #[must_use]
 pub fn resolve_plain_scalar(value: &str, version: YamlVersion) -> PlainScalarType {
+    // §10.2 (Core Schema) and §10.3 failsafe table: an empty plain
+    // scalar resolves to `tag:yaml.org,2002:null` — i.e. \`Null\`.
     if value.is_empty() {
-        return PlainScalarType::Str;
+        return PlainScalarType::Null;
     }
 
     if let Ok(i) = value.parse::<i64>() {

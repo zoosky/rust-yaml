@@ -35,7 +35,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let output_path = path
             .parent()
-            .unwrap_or(Path::new("."))
+            .unwrap_or_else(|| Path::new("."))
             .join(format!("parsed_{}", file_name.to_string_lossy()));
 
         println!("--- Processing: {}", path.display());

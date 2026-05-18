@@ -1,8 +1,8 @@
 //! YAML parser for converting tokens to events
 
 use crate::{
-    error::ErrorContext, tag::TagResolver, BasicScanner, Error, Limits, Position, Result, Scanner,
-    Token, TokenType,
+    BasicScanner, Error, Limits, Position, Result, Scanner, Token, TokenType, error::ErrorContext,
+    tag::TagResolver,
 };
 
 pub mod events;
@@ -58,8 +58,12 @@ fn has_unclosed_flow_collection(events: &[Event]) -> bool {
     let mut depth: i32 = 0;
     for ev in events.iter() {
         match &ev.event_type {
-            EventType::SequenceStart { flow_style: true, .. }
-            | EventType::MappingStart { flow_style: true, .. } => depth += 1,
+            EventType::SequenceStart {
+                flow_style: true, ..
+            }
+            | EventType::MappingStart {
+                flow_style: true, ..
+            } => depth += 1,
             EventType::SequenceEnd | EventType::MappingEnd => {
                 if depth > 0 {
                     depth -= 1;
@@ -587,7 +591,7 @@ impl BasicParser {
                     // explicit-key construct allows omitted values.
                     let key_was_collection = matches!(
                         self.events.last().map(|e| &e.event_type),
-                        Some(EventType::MappingEnd) | Some(EventType::SequenceEnd)
+                        Some(EventType::MappingEnd | EventType::SequenceEnd)
                     );
                     if key_was_collection {
                         self.events.push(Event::scalar(
@@ -1220,8 +1224,7 @@ impl BasicParser {
                                 // value instead of erroring.
                                 let key_was_collection = matches!(
                                     self.events.last().map(|e| &e.event_type),
-                                    Some(EventType::MappingEnd)
-                                        | Some(EventType::SequenceEnd)
+                                    Some(EventType::MappingEnd | EventType::SequenceEnd)
                                 );
                                 if !key_was_collection {
                                     return Err(Error::parse(
@@ -1370,13 +1373,14 @@ impl BasicParser {
                 // (yaml-test-suite T833, CML9).
                 if matches!(
                     self.state,
-                    ParserState::FlowMapping
-                        | ParserState::FlowSequence
+                    ParserState::FlowMapping | ParserState::FlowSequence
                 ) && matches!(
                     self.last_token_type,
-                    Some(TokenType::Scalar(..))
-                        | Some(TokenType::FlowSequenceEnd)
-                        | Some(TokenType::FlowMappingEnd)
+                    Some(
+                        TokenType::Scalar(..)
+                            | TokenType::FlowSequenceEnd
+                            | TokenType::FlowMappingEnd
+                    )
                 ) {
                     return Err(Error::parse(
                         token.start_position,
@@ -1478,12 +1482,11 @@ impl BasicParser {
                 }
 
                 if matches!(self.state, ParserState::BlockMappingValue) {
-                    let last_was_implicit_empty =
-                        matches!(self.events.last(), Some(ev) if matches!(
-                            &ev.event_type,
-                            EventType::Scalar { value, plain_implicit: true, style: ScalarStyle::Plain, .. }
-                                if value.is_empty()
-                        ));
+                    let last_was_implicit_empty = matches!(self.events.last(), Some(ev) if matches!(
+                        &ev.event_type,
+                        EventType::Scalar { value, plain_implicit: true, style: ScalarStyle::Plain, .. }
+                            if value.is_empty()
+                    ));
                     let same_line_as_value = self
                         .last_value_token_line
                         .map_or(false, |line| line == token.start_position.line);
@@ -1493,8 +1496,7 @@ impl BasicParser {
                     // S3PD shows it must NOT skip when the empty
                     // key was on a different line from the current
                     // scalar.
-                    let skip_pattern =
-                        last_was_implicit_empty && same_line_as_value;
+                    let skip_pattern = last_was_implicit_empty && same_line_as_value;
                     if !skip_pattern && !same_line_as_value {
                         if let Ok(Some(next_token)) = self.scanner.peek_token() {
                             if matches!(next_token.token_type, TokenType::Value) {
@@ -1619,15 +1621,13 @@ impl BasicParser {
                         // (yaml-test-suite PW8X).
                         let last_was_block_entry =
                             matches!(self.last_token_type, Some(TokenType::BlockEntry));
-                        let earliest_property_line = match (
-                            self.pending_anchor_line,
-                            self.pending_tag_line,
-                        ) {
-                            (Some(a), Some(t)) => Some(a.min(t)),
-                            (Some(a), None) => Some(a),
-                            (None, Some(t)) => Some(t),
-                            (None, None) => None,
-                        };
+                        let earliest_property_line =
+                            match (self.pending_anchor_line, self.pending_tag_line) {
+                                (Some(a), Some(t)) => Some(a.min(t)),
+                                (Some(a), None) => Some(a),
+                                (None, Some(t)) => Some(t),
+                                (None, None) => None,
+                            };
                         let property_from_prev_line = (self.pending_anchor.is_some()
                             || self.pending_tag.is_some())
                             && earliest_property_line
@@ -1694,8 +1694,7 @@ impl BasicParser {
                 //     `FlowMappingKey`) — just transition state.
                 match self.state {
                     ParserState::ImplicitDocumentStart => {
-                        let event =
-                            self.create_implicit_document_start(token.start_position);
+                        let event = self.create_implicit_document_start(token.start_position);
                         self.events.push(event);
                         // The mapping itself has no anchor/tag here —
                         // those (if any) belong to the (empty) key.
@@ -1751,10 +1750,7 @@ impl BasicParser {
                             .inline_wrap_column
                             .map_or(false, |c| c == token.start_position.column)
                             && !self.state_stack.is_empty()
-                            && matches!(
-                                self.state_stack.last(),
-                                Some(ParserState::BlockMappingKey)
-                            )
+                            && matches!(self.state_stack.last(), Some(ParserState::BlockMappingKey))
                         {
                             // Close inline-wrapped key mapping if its
                             // children are even (complete pairs).
@@ -1774,8 +1770,7 @@ impl BasicParser {
                         // node. yaml-test-suite M2N8/01 \`? []: x\`,
                         // and the empty-prefix variant M2N8/00
                         // \`- ? : x\`.
-                        let odd_children =
-                            innermost_mapping_has_odd_children(&self.events);
+                        let odd_children = innermost_mapping_has_odd_children(&self.events);
                         let key_marker_same_line = self
                             .last_key_marker_line
                             .map_or(false, |l| l == token.start_position.line);
@@ -1853,8 +1848,7 @@ impl BasicParser {
                                 return Ok(());
                             }
                         }
-                        let even_children =
-                            !innermost_mapping_has_odd_children(&self.events);
+                        let even_children = !innermost_mapping_has_odd_children(&self.events);
                         if even_children {
                             // §8.22: two implicit \`:\` on the same line
                             // in a block mapping (e.g. \`a: 'b': c\`) is
@@ -1993,7 +1987,7 @@ impl BasicParser {
                         // flow-open event (yaml-test-suite 9MMW).
                         let last_is_flow_close = matches!(
                             self.events.last().map(|e| &e.event_type),
-                            Some(EventType::MappingEnd) | Some(EventType::SequenceEnd)
+                            Some(EventType::MappingEnd | EventType::SequenceEnd)
                         );
                         if last_is_flow_close {
                             // Find the matching open via depth walk.
@@ -2004,8 +1998,12 @@ impl BasicParser {
                                     EventType::MappingEnd | EventType::SequenceEnd => {
                                         depth += 1;
                                     }
-                                    EventType::MappingStart { flow_style: true, .. }
-                                    | EventType::SequenceStart { flow_style: true, .. } => {
+                                    EventType::MappingStart {
+                                        flow_style: true, ..
+                                    }
+                                    | EventType::SequenceStart {
+                                        flow_style: true, ..
+                                    } => {
                                         depth -= 1;
                                         if depth == 0 {
                                             open_idx = Some(idx);
@@ -2065,8 +2063,15 @@ impl BasicParser {
                 // invalid (yaml-test-suite 9MAG, CTN5).
                 let no_prior_entry = matches!(
                     self.events.last().map(|e| &e.event_type),
-                    Some(EventType::SequenceStart { flow_style: true, .. })
-                        | Some(EventType::MappingStart { flow_style: true, .. })
+                    Some(
+                        EventType::SequenceStart {
+                            flow_style: true,
+                            ..
+                        } | EventType::MappingStart {
+                            flow_style: true,
+                            ..
+                        }
+                    )
                 );
                 if no_prior_entry {
                     return Err(Error::parse(

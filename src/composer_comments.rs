@@ -1,8 +1,8 @@
 //! Comment-preserving YAML composer
 
 use crate::{
-    parser::EventType, BasicParser, BasicScanner, CommentedValue, Comments, Error, Limits, Parser,
-    Position, ResourceTracker, Result, Scanner, Style, TokenType, Value,
+    BasicParser, BasicScanner, CommentedValue, Comments, Error, Limits, Parser, Position,
+    ResourceTracker, Result, Scanner, Style, TokenType, Value, parser::EventType,
 };
 use indexmap::IndexMap;
 use std::collections::HashMap;

@@ -264,7 +264,7 @@ fn main() {
     // Create object with multiple validation errors
     let mut invalid_object = IndexMap::new();
     invalid_object.insert(Value::String("age".to_string()), Value::Int(10)); // Too young
-                                                                             // Missing required "email" field
+    // Missing required "email" field
 
     let invalid_value = Value::Mapping(invalid_object);
 

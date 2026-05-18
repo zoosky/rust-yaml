@@ -7,8 +7,8 @@
 //! - Buffered reading with configurable chunk sizes
 
 use crate::{
-    parser::{Event, EventType},
     Error, Limits, Position, ResourceTracker, Result,
+    parser::{Event, EventType},
 };
 use std::collections::VecDeque;
 use std::io::{BufRead, BufReader};

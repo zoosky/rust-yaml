@@ -106,7 +106,9 @@ fn test_quoted_string_edge_cases() {
         (r#"key: "properly closed""#, true),
         (r#"key: 'properly closed'"#, true),
         ("key: \"escaped quote \\\"inside\\\"\"", true),
-        ("key: 'escaped quote \\'inside\\''", true),
+        // §7.3.2: single-quoted strings use `''` (NOT `\'`) as the
+        // in-string single-quote escape — `\` is a literal character.
+        ("key: 'escaped quote ''inside'''", true),
     ];
 
     for (input, should_succeed) in test_cases {
@@ -126,16 +128,22 @@ fn test_quoted_string_edge_cases() {
 #[test]
 fn test_invalid_escape_sequences() {
     let yaml = Yaml::new();
-    // These should parse but preserve unknown escapes literally
+    // §5.7: double-quoted strings have a strict escape allowlist.
+    // \\x requires 2 hex digits, \\y is not a valid escape. These
+    // are correctly rejected (yaml-test-suite 55WF and friends).
     let input = r#"test: "Unknown escape: \x \y \z""#;
+    assert!(
+        yaml.load_str(input).is_err(),
+        "double-quoted invalid escapes must error"
+    );
 
+    // Plain scalars don't process escapes — \\x is literal.
+    let plain = "test: backslash-x \\x and-y \\y";
     let result = yaml
-        .load_str(input)
-        .expect("Should parse with unknown escapes");
-
-    if let Value::Mapping(ref map) = result {
+        .load_str(plain)
+        .expect("plain scalars preserve escapes");
+    if let Value::Mapping(map) = result {
         let value = map.get(&Value::String("test".to_string()));
-        // Unknown escapes should be preserved literally
         assert!(value.is_some());
     } else {
         panic!("Should be a mapping");

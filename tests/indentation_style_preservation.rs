@@ -1,9 +1,9 @@
 #![allow(clippy::needless_raw_string_hashes)]
 #![allow(clippy::uninlined_format_args)]
 
+use rust_yaml::Yaml;
 use rust_yaml::scanner::BasicScanner;
 use rust_yaml::value::IndentStyle;
-use rust_yaml::Yaml;
 
 #[test]
 fn test_spaces_indentation_detection_2_spaces() {
@@ -40,33 +40,29 @@ fn test_spaces_indentation_detection_4_spaces() {
 }
 
 #[test]
-fn test_tabs_indentation_detection() {
-    let yaml_content = "root:\n\tlevel1:\n\t\tlevel2: value\n\tback: to_root";
+fn test_tabs_indentation_rejected() {
+    // §6.1: pure-tab indentation is invalid. The scanner errors
+    // out before detecting any style, so we test for the rejection
+    // rather than for a detected `Tabs` style (yaml-test-suite 4EJS).
+    let yaml_content = "root:\n\tlevel1: value";
 
-    let scanner = BasicScanner::new_eager(yaml_content.to_string());
+    let yaml = Yaml::new();
+    let result = yaml.load_str(yaml_content);
 
-    match scanner.detected_indent_style() {
-        Some(IndentStyle::Tabs) => {
-            // Expected: Tab indentation detected
-        }
-        other => panic!("Expected IndentStyle::Tabs, got {:?}", other),
-    }
+    assert!(result.is_err(), "pure-tab indentation must be rejected");
 }
 
 #[test]
 fn test_mixed_indentation_error() {
+    // \`root:\` indented with 2 spaces (level1), then a sibling at
+    // pure-tab indentation. The tab line errors — the scanner
+    // doesn't try to fold mixed styles.
     let yaml_content = "root:\n  level1: spaces\n\tlevel2: tab";
 
     let yaml = Yaml::new();
     let result = yaml.load_str(yaml_content);
 
-    assert!(result.is_err(), "Should fail with mixed indentation");
-    let error_msg = result.unwrap_err().to_string();
-    assert!(
-        error_msg.contains("mixed indentation"),
-        "Error should mention mixed indentation: {}",
-        error_msg
-    );
+    assert!(result.is_err(), "Should fail with mixed/tab indentation");
 }
 
 #[test]
@@ -153,7 +149,7 @@ fn test_indentation_style_round_trip_preservation() {
         .expect("Should serialize successfully");
 
     // Parse serialized version to check indentation detection
-    let scanner = BasicScanner::new_eager(serialized.to_string());
+    let scanner = BasicScanner::new_eager(serialized.clone());
 
     // The serialized version should maintain consistent indentation
     match scanner.detected_indent_style() {

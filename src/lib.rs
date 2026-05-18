@@ -125,11 +125,11 @@ pub use parser::{
     BasicParser, Event, EventType, Parser, StreamingConfig, StreamingParser, StreamingStats,
 };
 pub use representer::{Representer, SafeRepresenter};
-pub use resolver::{resolve_plain_scalar, BasicResolver, PlainScalarType, Resolver};
+pub use resolver::{BasicResolver, PlainScalarType, Resolver, resolve_plain_scalar};
 pub use scanner::{BasicScanner, Scanner, Token, TokenType};
 pub use serializer::{BasicSerializer, Serializer};
 pub use streaming_enhanced::{
-    stream_from_file, stream_from_string, StreamConfig, StreamingYamlParser,
+    StreamConfig, StreamingYamlParser, stream_from_file, stream_from_string,
 };
 pub use version::YamlVersion;
 pub use zerocopy::{ScannerStats, TokenPool, ZeroScanner, ZeroString, ZeroToken, ZeroTokenType};
@@ -530,11 +530,19 @@ prod: *base
                 EventType::StreamEnd => "-STR",
                 EventType::DocumentStart { .. } => "+DOC",
                 EventType::DocumentEnd { .. } => "-DOC",
-                EventType::MappingStart { flow_style: false, .. } => "+MAP",
-                EventType::MappingStart { flow_style: true, .. } => "+MAP{}",
+                EventType::MappingStart {
+                    flow_style: false, ..
+                } => "+MAP",
+                EventType::MappingStart {
+                    flow_style: true, ..
+                } => "+MAP{}",
                 EventType::MappingEnd => "-MAP",
-                EventType::SequenceStart { flow_style: false, .. } => "+SEQ",
-                EventType::SequenceStart { flow_style: true, .. } => "+SEQ[]",
+                EventType::SequenceStart {
+                    flow_style: false, ..
+                } => "+SEQ",
+                EventType::SequenceStart {
+                    flow_style: true, ..
+                } => "+SEQ[]",
                 EventType::SequenceEnd => "-SEQ",
                 EventType::Scalar { .. } => "=VAL",
                 EventType::Alias { .. } => "*ALIAS",
@@ -543,10 +551,7 @@ prod: *base
         assert_eq!(
             event_kinds,
             vec![
-                "+STR", "+DOC", "+MAP",
-                "+SEQ[]", "=VAL", "-SEQ",
-                "=VAL",
-                "-MAP", "-DOC", "-STR"
+                "+STR", "+DOC", "+MAP", "+SEQ[]", "=VAL", "-SEQ", "=VAL", "-MAP", "-DOC", "-STR"
             ],
             "Got: {event_kinds:?}"
         );
@@ -580,9 +585,12 @@ prod: *base
         assert_eq!(
             summary,
             vec![
-                "+SEQ", "+SEQ",
-                "=VAL :s1_i1", "=VAL :s1_i2",
-                "-SEQ", "=VAL :s2",
+                "+SEQ",
+                "+SEQ",
+                "=VAL :s1_i1",
+                "=VAL :s1_i2",
+                "-SEQ",
+                "=VAL :s2",
                 "-SEQ",
             ],
             "Got: {summary:?}"
@@ -665,9 +673,11 @@ prod: *base
         let scalars: Vec<(String, bool)> = events
             .iter()
             .filter_map(|e| match &e.event_type {
-                EventType::Scalar { value, plain_implicit, .. } => {
-                    Some((value.clone(), *plain_implicit))
-                }
+                EventType::Scalar {
+                    value,
+                    plain_implicit,
+                    ..
+                } => Some((value.clone(), *plain_implicit)),
                 _ => None,
             })
             .collect();
@@ -740,10 +750,7 @@ prod: *base
         let alias_present = events
             .iter()
             .any(|e| matches!(&e.event_type, EventType::Alias { anchor } if anchor == "a"));
-        assert!(
-            alias_present,
-            "Expected Alias *a; events: {events:?}"
-        );
+        assert!(alias_present, "Expected Alias *a; events: {events:?}");
     }
 
     /// A line beginning with `:` denotes a mapping entry with an implicit
@@ -806,7 +813,12 @@ prod: *base
         }
         assert_eq!(
             scalars,
-            vec!["a".to_string(), String::new(), "b".to_string(), String::new()],
+            vec![
+                "a".to_string(),
+                String::new(),
+                "b".to_string(),
+                String::new()
+            ],
             "Expected key/empty/key/empty pattern; got {scalars:?}"
         );
     }
@@ -841,7 +853,11 @@ prod: *base
                 _ => None,
             })
             .collect();
-        assert_eq!(scalars, vec!["ab::cd", "value"], "key/value split incorrect");
+        assert_eq!(
+            scalars,
+            vec!["ab::cd", "value"],
+            "key/value split incorrect"
+        );
     }
 
     #[test]

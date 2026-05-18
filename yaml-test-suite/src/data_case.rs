@@ -45,7 +45,9 @@ fn sorted_alphanum_test_dirs(root: &Path) -> Vec<fs::DirEntry> {
 }
 
 fn sorted_subdirs(parent: &Path) -> Vec<fs::DirEntry> {
-    let Ok(read) = fs::read_dir(parent) else { return Vec::new() };
+    let Ok(read) = fs::read_dir(parent) else {
+        return Vec::new();
+    };
     let mut entries: Vec<_> = read
         .filter_map(Result::ok)
         .filter(|e| e.path().is_dir())
@@ -85,7 +87,10 @@ fn read_optional_trimmed(dir: &Path, name: &str) -> String {
     if !path.exists() {
         return String::new();
     }
-    fs::read_to_string(path).unwrap_or_default().trim().to_string()
+    fs::read_to_string(path)
+        .unwrap_or_default()
+        .trim()
+        .to_string()
 }
 
 /// Read a file under `dir/name` and return its non-empty lines.
@@ -158,7 +163,11 @@ mod tests {
     fn load_single_test_reads_event_lines_skipping_blank_ones() {
         let dir = fresh();
         fs::write(dir.path().join("in.yaml"), "x").unwrap();
-        fs::write(dir.path().join("test.event"), "+STR\n\n+DOC\n=VAL :x\n-DOC\n-STR\n").unwrap();
+        fs::write(
+            dir.path().join("test.event"),
+            "+STR\n\n+DOC\n=VAL :x\n-DOC\n-STR\n",
+        )
+        .unwrap();
         let tc = load_single_test(dir.path(), "Y".into()).unwrap();
         assert_eq!(
             tc.expected_events,
@@ -234,9 +243,8 @@ mod tests {
 
     #[test]
     fn load_all_tests_panics_with_helpful_message_when_unreadable_root() {
-        let result = std::panic::catch_unwind(|| {
-            load_all_tests(Path::new("/this/does/not/exist/anywhere"))
-        });
+        let result =
+            std::panic::catch_unwind(|| load_all_tests(Path::new("/this/does/not/exist/anywhere")));
         assert!(result.is_err(), "expected panic on unreadable data_dir");
     }
 

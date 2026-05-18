@@ -802,9 +802,11 @@ mod tests {
         let schema = Schema::with_type(ValueType::String);
 
         // Valid case
-        assert!(schema
-            .validate(&Value::String("hello".to_string()), "test")
-            .is_ok());
+        assert!(
+            schema
+                .validate(&Value::String("hello".to_string()), "test")
+                .is_ok()
+        );
 
         // Invalid case
         assert!(schema.validate(&Value::Int(42), "test").is_err());
@@ -858,8 +860,10 @@ mod tests {
         let mut invalid_map = IndexMap::new();
         invalid_map.insert(Value::String("age".to_string()), Value::Int(30));
 
-        assert!(schema
-            .validate(&Value::Mapping(invalid_map), "test")
-            .is_err());
+        assert!(
+            schema
+                .validate(&Value::Mapping(invalid_map), "test")
+                .is_err()
+        );
     }
 }

@@ -35,20 +35,38 @@ pub fn event_to_tree_line(kind: &EventType) -> String {
         EventType::StreamStart => "+STR".to_string(),
         EventType::StreamEnd => "-STR".to_string(),
         EventType::DocumentStart { implicit, .. } => {
-            if *implicit { "+DOC".to_string() } else { "+DOC ---".to_string() }
+            if *implicit {
+                "+DOC".to_string()
+            } else {
+                "+DOC ---".to_string()
+            }
         }
         EventType::DocumentEnd { implicit } => {
-            if *implicit { "-DOC".to_string() } else { "-DOC ...".to_string() }
+            if *implicit {
+                "-DOC".to_string()
+            } else {
+                "-DOC ...".to_string()
+            }
         }
-        EventType::MappingStart { anchor, tag, flow_style } => {
-            collection_start("+MAP", "{}", *flow_style, anchor, tag)
-        }
+        EventType::MappingStart {
+            anchor,
+            tag,
+            flow_style,
+        } => collection_start("+MAP", "{}", *flow_style, anchor, tag),
         EventType::MappingEnd => "-MAP".to_string(),
-        EventType::SequenceStart { anchor, tag, flow_style } => {
-            collection_start("+SEQ", "[]", *flow_style, anchor, tag)
-        }
+        EventType::SequenceStart {
+            anchor,
+            tag,
+            flow_style,
+        } => collection_start("+SEQ", "[]", *flow_style, anchor, tag),
         EventType::SequenceEnd => "-SEQ".to_string(),
-        EventType::Scalar { anchor, tag, value, style, .. } => {
+        EventType::Scalar {
+            anchor,
+            tag,
+            value,
+            style,
+            ..
+        } => {
             let mut s = "=VAL".to_string();
             append_anchor_and_tag(&mut s, anchor, tag);
             s.push(' ');
@@ -77,8 +95,12 @@ fn collection_start(
 }
 
 fn append_anchor_and_tag(out: &mut String, anchor: &Option<String>, tag: &Option<String>) {
-    if let Some(a) = anchor { out.push_str(&format!(" &{a}")); }
-    if let Some(t) = tag { out.push_str(&format!(" <{t}>")); }
+    if let Some(a) = anchor {
+        out.push_str(&format!(" &{a}"));
+    }
+    if let Some(t) = tag {
+        out.push_str(&format!(" <{t}>"));
+    }
 }
 
 fn style_char(style: ScalarStyle) -> char {
@@ -326,7 +348,9 @@ mod tests {
     #[test]
     fn alias_renders_equal_ali_star_anchor() {
         assert_eq!(
-            event_to_tree_line(&EventType::Alias { anchor: "ref".into() }),
+            event_to_tree_line(&EventType::Alias {
+                anchor: "ref".into()
+            }),
             "=ALI *ref"
         );
     }
@@ -372,14 +396,25 @@ mod tests {
         called: bool,
     }
     impl ParserTrait for ErrParser {
-        fn check_event(&self) -> bool { !self.called }
-        fn peek_event(&self) -> rust_yaml::Result<Option<&rust_yaml::parser::Event>> { Ok(None) }
+        fn check_event(&self) -> bool {
+            !self.called
+        }
+        fn peek_event(&self) -> rust_yaml::Result<Option<&rust_yaml::parser::Event>> {
+            Ok(None)
+        }
         fn get_event(&mut self) -> rust_yaml::Result<Option<rust_yaml::parser::Event>> {
             self.called = true;
-            Err(rust_yaml::Error::parse(rust_yaml::Position::start(), "synthetic"))
+            Err(rust_yaml::Error::parse(
+                rust_yaml::Position::start(),
+                "synthetic",
+            ))
         }
-        fn reset(&mut self) { self.called = false; }
-        fn position(&self) -> rust_yaml::Position { rust_yaml::Position::start() }
+        fn reset(&mut self) {
+            self.called = false;
+        }
+        fn position(&self) -> rust_yaml::Position {
+            rust_yaml::Position::start()
+        }
     }
 
     #[test]

@@ -1,6 +1,6 @@
 //! YAML scanner for tokenization
 
-use crate::{error::ErrorContext, Error, Limits, Position, ResourceTracker, Result};
+use crate::{Error, Limits, Position, ResourceTracker, Result, error::ErrorContext};
 
 pub mod indentation;
 pub mod scalar_scanner;
@@ -313,10 +313,7 @@ impl BasicScanner {
                 // (\`]\` / \`}\`) is allowed at the parent indent — it
                 // closes the flow collection, not adds content
                 // (yaml-test-suite NKF9 trailing-line \`}\` at col 1).
-                let is_closer = matches!(
-                    self.char_cache.get(i).copied(),
-                    Some(']' | '}')
-                );
+                let is_closer = matches!(self.char_cache.get(i).copied(), Some(']' | '}'));
                 if has_content && !is_closer {
                     let parent_indent = self.indent_stack.last().copied().unwrap_or(0);
                     if probe <= parent_indent {
@@ -466,8 +463,11 @@ impl BasicScanner {
             // indentation (invalid). Otherwise it's a value line.
             let looks_like_key = self.line_after_indent_is_implicit_key();
             if looks_like_key {
-                let context = crate::error::ErrorContext::from_input(&self.input, &self.position, 4)
-                    .with_suggestion("Use either tabs OR spaces for indentation, not both".to_string());
+                let context =
+                    crate::error::ErrorContext::from_input(&self.input, &self.position, 4)
+                        .with_suggestion(
+                            "Use either tabs OR spaces for indentation, not both".to_string(),
+                        );
                 return Err(Error::invalid_character_with_context(
                     self.position,
                     '\t',
@@ -484,10 +484,7 @@ impl BasicScanner {
         //     at the root are not "block indentation" — there's no
         //     enclosing block — and yaml-test-suite 6CA3 / Q5MG accept
         //     them.
-        if has_tabs
-            && !has_spaces
-            && !matches!(self.current_char, Some('[' | '{'))
-        {
+        if has_tabs && !has_spaces && !matches!(self.current_char, Some('[' | '{')) {
             let context = crate::error::ErrorContext::from_input(&self.input, &self.position, 4)
                 .with_suggestion("Use space characters for indentation".to_string());
             return Err(Error::invalid_character_with_context(
@@ -841,7 +838,7 @@ impl BasicScanner {
 
             let next_col = self.position.column;
             let next_ch = self.current_char;
-            let is_doc_marker = matches!(next_ch, Some('-') | Some('.'))
+            let is_doc_marker = matches!(next_ch, Some('-' | '.'))
                 && self.peek_char(1) == next_ch
                 && self.peek_char(2) == next_ch
                 && self.peek_char(3).map_or(true, |c| c.is_whitespace());
@@ -864,11 +861,7 @@ impl BasicScanner {
                 true
             } else {
                 let block_indent = self.indent_stack.last().copied().unwrap_or(0);
-                let compact_indent = self
-                    .compact_sequence_indents
-                    .last()
-                    .copied()
-                    .unwrap_or(0);
+                let compact_indent = self.compact_sequence_indents.last().copied().unwrap_or(0);
                 let parent_indent = block_indent.max(compact_indent);
                 next_col >= parent_indent + 2 || next_col >= start_col
             };
@@ -1103,8 +1096,7 @@ impl BasicScanner {
                 // at col 1 are legal.
                 if newlines > 0
                     && self.flow_level == 0
-                    && (self.indent_stack.len() > 1
-                        || !self.compact_sequence_indents.is_empty())
+                    && (self.indent_stack.len() > 1 || !self.compact_sequence_indents.is_empty())
                     && !matches!(self.current_char, None | Some('\n' | '\r'))
                 {
                     let parent_indent = self.indent_stack.last().copied().unwrap_or(0);
@@ -1148,9 +1140,7 @@ impl BasicScanner {
                 // we already pushed) before applying the fold. Don't
                 // strip past `escape_end` — escape-produced whitespace
                 // is literal content, not "trailing" line whitespace.
-                while value.len() > escape_end
-                    && matches!(value.chars().last(), Some(' ' | '\t'))
-                {
+                while value.len() > escape_end && matches!(value.chars().last(), Some(' ' | '\t')) {
                     value.pop();
                 }
                 if newlines <= 1 {
@@ -1179,7 +1169,14 @@ impl BasicScanner {
         if !closed {
             return Err(Error::scan(
                 self.position,
-                format!("Unclosed {} quoted string", if quote_char == '"' { "double" } else { "single" }),
+                format!(
+                    "Unclosed {} quoted string",
+                    if quote_char == '"' {
+                        "double"
+                    } else {
+                        "single"
+                    }
+                ),
             ));
         }
 
@@ -1243,7 +1240,8 @@ impl BasicScanner {
             if self.flow_level > 0 {
                 return Err(Error::scan(
                     self.position,
-                    "`---` document-start marker is not allowed inside a flow collection".to_string(),
+                    "`---` document-start marker is not allowed inside a flow collection"
+                        .to_string(),
                 ));
             }
             let start_pos = self.position;
@@ -1811,21 +1809,18 @@ impl BasicScanner {
                 //     value when the previous token completed a key node
                 //     (quoted/plain scalar, alias, or closed flow
                 //     collection) — see yaml-test-suite 5MUD, 5T43.
-                ':' if self
-                    .peek_char(1)
-                    .map_or(true, |c| {
-                        c.is_whitespace() || (self.flow_level > 0 && ",[]{}".contains(c))
-                    })
-                    || (self.flow_level > 0
-                        && matches!(
-                            self.tokens.last().map(|t| &t.token_type),
-                            Some(
-                                TokenType::Scalar(_, _)
-                                    | TokenType::Alias(_)
-                                    | TokenType::FlowMappingEnd
-                                    | TokenType::FlowSequenceEnd
-                            )
-                        )) =>
+                ':' if self.peek_char(1).map_or(true, |c| {
+                    c.is_whitespace() || (self.flow_level > 0 && ",[]{}".contains(c))
+                }) || (self.flow_level > 0
+                    && matches!(
+                        self.tokens.last().map(|t| &t.token_type),
+                        Some(
+                            TokenType::Scalar(_, _)
+                                | TokenType::Alias(_)
+                                | TokenType::FlowMappingEnd
+                                | TokenType::FlowSequenceEnd
+                        )
+                    )) =>
                 {
                     // §6.2: a \`:\` at line-start (the explicit-value
                     // counterpart of an explicit \`?\` key) must be
@@ -1864,12 +1859,10 @@ impl BasicScanner {
                             let mut open_idx: Option<usize> = None;
                             for (idx, t) in self.tokens.iter().enumerate().rev() {
                                 match &t.token_type {
-                                    TokenType::FlowSequenceEnd
-                                    | TokenType::FlowMappingEnd => {
+                                    TokenType::FlowSequenceEnd | TokenType::FlowMappingEnd => {
                                         depth += 1;
                                     }
-                                    TokenType::FlowSequenceStart
-                                    | TokenType::FlowMappingStart => {
+                                    TokenType::FlowSequenceStart | TokenType::FlowMappingStart => {
                                         depth -= 1;
                                         if depth == 0 {
                                             open_idx = Some(idx);
@@ -1977,10 +1970,8 @@ impl BasicScanner {
                                     .to_string(),
                             ));
                         }
-                        if matches!(
-                            last.token_type,
-                            TokenType::Anchor(_) | TokenType::Tag(_)
-                        ) && last.end_position.line == self.position.line
+                        if matches!(last.token_type, TokenType::Anchor(_) | TokenType::Tag(_))
+                            && last.end_position.line == self.position.line
                         {
                             return Err(Error::scan(
                                 self.position,
@@ -2006,7 +1997,7 @@ impl BasicScanner {
                             let mut prior_scalar_line = None;
                             for t in self.tokens.iter().rev().skip(1) {
                                 match &t.token_type {
-                                    TokenType::Anchor(_) | TokenType::Tag(_) => continue,
+                                    TokenType::Anchor(_) | TokenType::Tag(_) => {}
                                     TokenType::Scalar(..) => {
                                         prior_scalar_line = Some(t.end_position.line);
                                         break;
@@ -2128,7 +2119,8 @@ impl BasicScanner {
                         // wrongly trigger an early close, breaking
                         // multi-line nested sequences (yaml-test-suite
                         // 3ALJ, 57H4).
-                        self.indent_stack.push(self.position.column.saturating_sub(1));
+                        self.indent_stack
+                            .push(self.position.column.saturating_sub(1));
                         self.indent_is_sequence.push(true);
                         // Check depth limit
                         self.resource_tracker
@@ -2499,9 +2491,9 @@ impl BasicScanner {
                         loop {
                             match self.peek_char(probe) {
                                 None => return has_digit,
-                                Some('\n') | Some('\r') => return has_digit,
+                                Some('\n' | '\r') => return has_digit,
                                 Some('#') => return has_digit,
-                                Some(' ') | Some('\t') => probe += 1,
+                                Some(' ' | '\t') => probe += 1,
                                 Some(_) => return false,
                             }
                         }
@@ -2870,7 +2862,7 @@ impl BasicScanner {
 
         loop {
             let mut line_indent = 0;
-            while let Some(' ') = self.current_char {
+            while self.current_char == Some(' ') {
                 line_indent += 1;
                 self.advance();
             }
@@ -2895,12 +2887,12 @@ impl BasicScanner {
                     }
                     break;
                 }
-                Some('\n') | Some('\r') => {
+                Some('\n' | '\r') => {
                     if line_indent > max_blank_indent {
                         max_blank_indent = line_indent;
                     }
                     self.advance();
-                    continue;
+                    // fall through to next iteration
                 }
                 Some(_) => {
                     // If we're nested inside another block — either
@@ -2911,8 +2903,8 @@ impl BasicScanner {
                     // strictly deeper than base_indent, it's a
                     // sibling outside the scalar's scope (yaml-test-
                     // suite K858, P2AD).
-                    let inside_block = self.indent_stack.len() > 1
-                        || !self.compact_sequence_indents.is_empty();
+                    let inside_block =
+                        self.indent_stack.len() > 1 || !self.compact_sequence_indents.is_empty();
                     if inside_block && line_indent <= base_indent {
                         content_indent = max_blank_indent.max(base_indent + 1);
                     } else {
@@ -2992,12 +2984,12 @@ impl BasicScanner {
             let save_pos = self.position;
             let save_ch = self.current_char;
             let save_idx = self.current_char_index;
-            while let Some(' ') = self.current_char {
+            while self.current_char == Some(' ') {
                 line_indent += 1;
                 self.advance();
             }
 
-            let line_is_blank = matches!(self.current_char, Some('\n') | Some('\r') | None);
+            let line_is_blank = matches!(self.current_char, Some('\n' | '\r') | None);
 
             if !line_is_blank && line_indent < content_indent {
                 // Non-empty line with less indent ends the scalar; rewind.
@@ -3022,7 +3014,7 @@ impl BasicScanner {
                 // to consume. EOF after we've consumed some whitespace
                 // on the trailing line ALSO counts as one final blank
                 // line (yaml-test-suite JEF9/02: `- |+\n        `).
-                if matches!(self.current_char, Some('\n') | Some('\r')) {
+                if matches!(self.current_char, Some('\n' | '\r')) {
                     // Whitespace beyond content_indent is literal content
                     // even on blank lines (yaml-test-suite 6FWR).
                     for _ in content_indent..line_indent {
@@ -3108,12 +3100,12 @@ impl BasicScanner {
             let save_pos = self.position;
             let save_ch = self.current_char;
             let save_idx = self.current_char_index;
-            while let Some(' ') = self.current_char {
+            while self.current_char == Some(' ') {
                 line_indent += 1;
                 self.advance();
             }
 
-            let line_is_blank = matches!(self.current_char, Some('\n') | Some('\r') | None);
+            let line_is_blank = matches!(self.current_char, Some('\n' | '\r') | None);
 
             if !line_is_blank && line_indent < content_indent {
                 self.position = save_pos;
@@ -3130,7 +3122,7 @@ impl BasicScanner {
             }
 
             if line_is_blank {
-                if matches!(self.current_char, Some('\n') | Some('\r')) {
+                if matches!(self.current_char, Some('\n' | '\r')) {
                     lines.push(Line {
                         text: String::new(),
                         kind: LineKind::Empty,
@@ -3266,7 +3258,7 @@ impl BasicScanner {
                             }
                             depth -= 1;
                         }
-                        TokenType::Anchor(_) | TokenType::Tag(_) => continue,
+                        TokenType::Anchor(_) | TokenType::Tag(_) => {}
                         other => {
                             if depth == 0 {
                                 last_meaningful = Some(other.clone());
@@ -3288,7 +3280,8 @@ impl BasicScanner {
                 ) {
                     return Err(Error::scan(
                         self.position,
-                        "Indentation increase has no parent in current mapping/sequence".to_string(),
+                        "Indentation increase has no parent in current mapping/sequence"
+                            .to_string(),
                     ));
                 }
             }
@@ -3373,7 +3366,7 @@ impl BasicScanner {
     fn most_recent_token_is_value_separator(&self) -> bool {
         for t in self.tokens.iter().rev() {
             match t.token_type {
-                TokenType::Anchor(_) | TokenType::Tag(_) => continue,
+                TokenType::Anchor(_) | TokenType::Tag(_) => {}
                 TokenType::Value => return true,
                 _ => return false,
             }
@@ -3649,8 +3642,14 @@ mod tests {
         // Critical: -DOC must come before -STR.
         let doc_end_idx = kinds.iter().position(|s| *s == "-DOC");
         let str_end_idx = kinds.iter().position(|s| *s == "-STR");
-        assert!(doc_end_idx.is_some(), "missing -DOC in event stream: {kinds:?}");
-        assert!(doc_end_idx < str_end_idx, "expected -DOC before -STR, got {kinds:?}");
+        assert!(
+            doc_end_idx.is_some(),
+            "missing -DOC in event stream: {kinds:?}"
+        );
+        assert!(
+            doc_end_idx < str_end_idx,
+            "expected -DOC before -STR, got {kinds:?}"
+        );
     }
 
     /// YAML 1.2 §5.7 hex / Unicode escapes in double-quoted strings.
@@ -3663,7 +3662,10 @@ mod tests {
             (r#""\U0001F600""#, "\u{1f600}"),
         ] {
             let mut p = BasicParser::new_eager(input.to_string());
-            assert!(p.take_scanning_error().is_none(), "no scan error for {input}");
+            assert!(
+                p.take_scanning_error().is_none(),
+                "no scan error for {input}"
+            );
             let mut found = None;
             while let Ok(Some(ev)) = p.get_event() {
                 if let EventType::Scalar { value, .. } = ev.event_type {
@@ -3677,9 +3679,12 @@ mod tests {
 
     #[test]
     fn truncated_hex_escape_is_a_scan_error() {
-        use crate::parser::{BasicParser, Parser as ParserTrait};
+        use crate::parser::BasicParser;
         let mut p = BasicParser::new_eager(r#""\x4""#.to_string());
-        assert!(p.take_scanning_error().is_some(), "truncated \\x escape must error");
+        assert!(
+            p.take_scanning_error().is_some(),
+            "truncated \\x escape must error"
+        );
     }
 
     /// YAML 1.2 §5.7: double-quoted strings have a strict allowlist of escape
@@ -3694,7 +3699,7 @@ mod tests {
         if scan_err.is_none() {
             loop {
                 match p.get_event() {
-                    Ok(Some(_)) => continue,
+                    Ok(Some(_)) => {}
                     Ok(None) => break,
                     Err(_) => {
                         parse_err = true;
@@ -3718,9 +3723,7 @@ mod tests {
     #[test]
     fn complex_key_directly_after_explicit_doc_start_opens_mapping() {
         use crate::parser::{BasicParser, EventType, Parser as ParserTrait};
-        let mut p = BasicParser::new_eager(
-            "--- !!set\n? Mark McGwire\n? Sammy Sosa\n".to_string(),
-        );
+        let mut p = BasicParser::new_eager("--- !!set\n? Mark McGwire\n? Sammy Sosa\n".to_string());
         assert!(p.take_scanning_error().is_none());
         let mut saw_map_start = false;
         let mut saw_error = false;
@@ -3750,10 +3753,16 @@ mod tests {
     fn anchor_name_may_contain_unicode_symbols() {
         use crate::parser::{BasicParser, EventType, Parser as ParserTrait};
         let mut p = BasicParser::new_eager("---\n- &😁 unicode anchor\n".to_string());
-        assert!(p.take_scanning_error().is_none(), "unicode anchor must not error");
+        assert!(
+            p.take_scanning_error().is_none(),
+            "unicode anchor must not error"
+        );
         let mut anchors = Vec::new();
         while let Ok(Some(ev)) = p.get_event() {
-            if let EventType::Scalar { anchor: Some(a), .. } = ev.event_type {
+            if let EventType::Scalar {
+                anchor: Some(a), ..
+            } = ev.event_type
+            {
                 anchors.push(a);
             }
         }
@@ -3771,7 +3780,10 @@ mod tests {
         let mut p = BasicParser::new_eager(
             "%TAG !e! tag:example.com,2000:app/\n---\n- !e!tag%21 baz\n".to_string(),
         );
-        assert!(p.take_scanning_error().is_none(), "tag percent-escapes must not error");
+        assert!(
+            p.take_scanning_error().is_none(),
+            "tag percent-escapes must not error"
+        );
         let mut tags = Vec::new();
         while let Ok(Some(ev)) = p.get_event() {
             if let EventType::Scalar { tag: Some(t), .. } = ev.event_type {
@@ -3809,8 +3821,7 @@ mod tests {
     /// a single plain scalar `"---word1 word2"`. Tracked by yaml-test-suite 82AN.
     #[test]
     fn three_dashes_followed_by_text_folds_continuation_line() {
-        let events = parse_with_timeout("---word1\nword2\n")
-            .expect("parser hung");
+        let events = parse_with_timeout("---word1\nword2\n").expect("parser hung");
         let scalars: Vec<&str> = events
             .iter()
             .filter_map(|e| match &e.event_type {
@@ -3919,9 +3930,11 @@ data: test
         assert_eq!(scalar_values, vec!["key", "value", "data", "test"]);
 
         // Should not contain any comment tokens
-        assert!(!tokens
-            .iter()
-            .any(|t| matches!(t.token_type, TokenType::Comment(_))));
+        assert!(
+            !tokens
+                .iter()
+                .any(|t| matches!(t.token_type, TokenType::Comment(_)))
+        );
     }
 
     #[test]
@@ -3943,9 +3956,11 @@ normal: value # This is a comment
         assert!(scalar_values.contains(&"This has a # character".to_string()));
         assert!(scalar_values.contains(&"Also has # character".to_string()));
         assert!(scalar_values.contains(&"value".to_string()));
-        assert!(!scalar_values
-            .iter()
-            .any(|s| s.contains("This is a comment")));
+        assert!(
+            !scalar_values
+                .iter()
+                .any(|s| s.contains("This is a comment"))
+        );
     }
 
     #[test]

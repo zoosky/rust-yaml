@@ -1,12 +1,12 @@
 //! YAML composer for converting events to nodes
 
-use crate::resolver::{resolve_plain_scalar, PlainScalarType};
+use crate::resolver::{PlainScalarType, resolve_plain_scalar};
 #[cfg(test)]
 use crate::scanner::Scanner;
 use crate::tag::TagResolver;
 use crate::version::YamlVersion;
 use crate::{
-    parser::EventType, BasicParser, Error, Limits, Parser, Position, ResourceTracker, Result, Value,
+    BasicParser, Error, Limits, Parser, Position, ResourceTracker, Result, Value, parser::EventType,
 };
 use indexmap::IndexMap;
 use std::collections::HashMap;

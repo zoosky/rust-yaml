@@ -247,8 +247,9 @@ fn test_custom_config() {
 fn test_error_handling() {
     let yaml = Yaml::new();
 
-    // Test actually invalid YAML syntax - mixed indentation which should fail
-    let result = yaml.load_str("key:\n  value1\n\tvalue2");
+    // Test actually invalid YAML syntax — pure-tab indentation is rejected
+    // per §6.1 (tabs cannot serve as indentation).
+    let result = yaml.load_str("key:\n\tvalue");
     assert!(result.is_err());
 
     if let Err(error) = result {
@@ -655,13 +656,14 @@ fn test_nested_compact_sequences() {
     let parsed = yaml.load_str(input).expect("Failed to parse");
 
     // Check top-level structure
-    let root = match &parsed {
-        Value::Mapping(m) => m,
-        _ => panic!("root should be a mapping"),
+    let Value::Mapping(root) = &parsed else {
+        panic!("root should be a mapping");
     };
-    let spec = match root.get(&Value::String("spec".into())) {
-        Some(Value::Mapping(m)) => m,
-        other => panic!("spec should be a mapping, got {:?}", other),
+    let Some(Value::Mapping(spec)) = root.get(&Value::String("spec".into())) else {
+        panic!(
+            "spec should be a mapping, got {:?}",
+            root.get(&Value::String("spec".into()))
+        );
     };
 
     // versions must be a 1-element sequence
@@ -721,13 +723,11 @@ fn test_nested_compact_sequences() {
         },
         _ => panic!("schema missing"),
     };
-    let props = match oas.get(&Value::String("properties".into())) {
-        Some(Value::Mapping(m)) => m,
-        _ => panic!("properties missing"),
+    let Some(Value::Mapping(props)) = oas.get(&Value::String("properties".into())) else {
+        panic!("properties missing");
     };
-    let spec_inner = match props.get(&Value::String("spec".into())) {
-        Some(Value::Mapping(m)) => m,
-        _ => panic!("spec inner missing"),
+    let Some(Value::Mapping(spec_inner)) = props.get(&Value::String("spec".into())) else {
+        panic!("spec inner missing");
     };
 
     // required must be a compact sequence [schedule]

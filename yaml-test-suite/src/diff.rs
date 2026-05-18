@@ -42,7 +42,10 @@ mod tests {
     #[test]
     fn first_diff_is_reported_with_one_based_line_numbers() {
         assert_eq!(
-            show_diff(&s(&["+STR", "+DOC", "=VAL :a"]), &s(&["+STR", "+DOC", "=VAL :b"])),
+            show_diff(
+                &s(&["+STR", "+DOC", "=VAL :a"]),
+                &s(&["+STR", "+DOC", "=VAL :b"])
+            ),
             "  line 3: expected: \"=VAL :a\"\n  line 3:   actual: \"=VAL :b\""
         );
     }

@@ -250,21 +250,21 @@ flag: yes
     assert_eq!(docs.len(), 2, "two documents in stream");
 
     // Doc 1: %YAML 1.1 in effect, `yes` is bool.
-    let Value::Mapping(doc1) = &docs[0] else {
+    let Value::Mapping(first_doc) = &docs[0] else {
         panic!("doc1 expected mapping");
     };
     assert_eq!(
-        doc1.get(&Value::String("flag".to_string())),
+        first_doc.get(&Value::String("flag".to_string())),
         Some(&Value::Bool(true)),
         "doc1 under 1.1: yes is Bool(true)"
     );
 
     // Doc 2: no directive => default 1.2, `yes` is string.
-    let Value::Mapping(doc2) = &docs[1] else {
+    let Value::Mapping(second_doc) = &docs[1] else {
         panic!("doc2 expected mapping");
     };
     assert_eq!(
-        doc2.get(&Value::String("flag".to_string())),
+        second_doc.get(&Value::String("flag".to_string())),
         Some(&Value::String("yes".to_string())),
         "doc2 reverts to 1.2 default: yes is String"
     );

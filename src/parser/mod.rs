@@ -197,6 +197,11 @@ pub struct BasicParser {
     /// next key — belongs to that key). yaml-test-suite 6BFJ, 9KAX.
     pending_anchor_line: Option<usize>,
     pending_tag: Option<String>,
+    /// Same idea as `pending_anchor_line` but for tags. Used to detect
+    /// a freestanding tag in block-sequence context that should be
+    /// flushed as the previous item's empty value rather than carried
+    /// onto the next item (yaml-test-suite FH7J).
+    pending_tag_line: Option<usize>,
     last_token_type: Option<TokenType>,
     scanning_error: Option<Error>,
     yaml_version: Option<(u8, u8)>,
@@ -266,6 +271,7 @@ impl BasicParser {
             pending_anchor: None,
             pending_anchor_line: None,
             pending_tag: None,
+            pending_tag_line: None,
             last_token_type: None,
             scanning_error: None,
             yaml_version: None,
@@ -301,6 +307,7 @@ impl BasicParser {
             pending_anchor: None,
             pending_anchor_line: None,
             pending_tag: None,
+            pending_tag_line: None,
             last_token_type: None,
             scanning_error: None,
             yaml_version: None,
@@ -338,6 +345,7 @@ impl BasicParser {
             pending_anchor: None,
             pending_anchor_line: None,
             pending_tag: None,
+            pending_tag_line: None,
             last_token_type: None,
             scanning_error: None,
             yaml_version: None,
@@ -1493,10 +1501,18 @@ impl BasicParser {
                         // (yaml-test-suite PW8X).
                         let last_was_block_entry =
                             matches!(self.last_token_type, Some(TokenType::BlockEntry));
+                        let earliest_property_line = match (
+                            self.pending_anchor_line,
+                            self.pending_tag_line,
+                        ) {
+                            (Some(a), Some(t)) => Some(a.min(t)),
+                            (Some(a), None) => Some(a),
+                            (None, Some(t)) => Some(t),
+                            (None, None) => None,
+                        };
                         let property_from_prev_line = (self.pending_anchor.is_some()
                             || self.pending_tag.is_some())
-                            && self
-                                .pending_anchor_line
+                            && earliest_property_line
                                 .map_or(false, |a| a < token.start_position.line);
                         if last_was_block_entry || property_from_prev_line {
                             self.events.push(Event::scalar(
@@ -1508,6 +1524,8 @@ impl BasicParser {
                                 false,
                                 ScalarStyle::Plain,
                             ));
+                            self.pending_anchor_line = None;
+                            self.pending_tag_line = None;
                         }
                     }
                     ParserState::BlockMapping | ParserState::BlockMappingValue => {
@@ -1837,6 +1855,7 @@ impl BasicParser {
                 match self.tag_resolver.resolve(&tag) {
                     Ok(resolved_tag) => {
                         self.pending_tag = Some(resolved_tag.uri);
+                        self.pending_tag_line = Some(token.start_position.line);
                     }
                     Err(e) => {
                         // Only error on named-handle tags (`!name!suffix`),
@@ -1851,6 +1870,7 @@ impl BasicParser {
                             ));
                         }
                         self.pending_tag = Some(tag.clone());
+                        self.pending_tag_line = Some(token.start_position.line);
                     }
                 }
             }

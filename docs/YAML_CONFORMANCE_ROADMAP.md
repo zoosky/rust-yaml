@@ -7,11 +7,11 @@ Live tracker for closing the gap between rust-yaml and the yaml/yaml-test-suite
 
 | Metric         | Value                  |
 | -------------- | ---------------------- |
-| Tests passing  | **687 / 735** (93.5 %) |
+| Tests passing  | **694 / 735** (94.4 %) |
 | Parser hangs   | 0 ✅                   |
 | Wrong-reject   | 3                      |
-| Wrong-accept   | 33                     |
-| Wrong-events   | 12                     |
+| Wrong-accept   | 28                     |
+| Wrong-events   | 10                     |
 | Lib unit tests | 185 passing            |
 
 Live results are written to `target/yaml-test-suite-failures.txt` after every

@@ -1533,6 +1533,31 @@ impl BasicParser {
                     ParserState::FlowMappingKey => {
                         self.state = ParserState::FlowMappingValue;
                     }
+                    ParserState::BlockSequence
+                        if matches!(self.last_token_type, Some(TokenType::BlockEntry)) =>
+                    {
+                        // §8.22: \`- :\` — the sequence item is a
+                        // mapping with an implicit empty key and the
+                        // `:` is the key/value separator (yaml-test-
+                        // suite UKK6/00).
+                        self.state_stack.push(self.state);
+                        self.events.push(Event::mapping_start(
+                            token.start_position,
+                            self.pending_anchor.take(),
+                            self.pending_tag.take(),
+                            false,
+                        ));
+                        self.events.push(Event::scalar(
+                            token.start_position,
+                            None,
+                            None,
+                            String::new(),
+                            true,
+                            false,
+                            ScalarStyle::Plain,
+                        ));
+                        self.state = ParserState::BlockMappingValue;
+                    }
                     ParserState::FlowMapping => {
                         // §7.5: in FlowMapping state, a `:` separates
                         // an emitted key from its value (odd children

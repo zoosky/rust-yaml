@@ -281,8 +281,44 @@ impl BasicScanner {
 
     /// Handle indentation and produce block tokens if necessary
     fn handle_indentation(&mut self) -> Result<()> {
-        // Only handle indentation in block context (flow_level == 0)
+        // In flow context: if there is a non-trivial enclosing block
+        // (indent_stack has more than the implicit root level), each
+        // continuation line that has content must be indented MORE than
+        // that enclosing block's indent. \`flow: [a,\\nb,c]\` with \`b\`
+        // at col 1 violates this rule because the block mapping enclosing
+        // \`flow:\` sits at indent 0 (yaml-test-suite 9C9N).
+        //
+        // Top-level flow (no enclosing block; indent_stack is just \[0\])
+        // is exempt — `[a,\\nb]` is fine there because the flow content
+        // isn't nested inside any block (yaml-test-suite 4ZYM).
         if self.flow_level > 0 {
+            if self.indent_stack.len() > 1 {
+                let mut probe = 0usize;
+                let mut i = self.current_char_index;
+                while i < self.char_cache.len() {
+                    match self.char_cache[i] {
+                        ' ' => {
+                            probe += 1;
+                            i += 1;
+                        }
+                        '\t' => i += 1,
+                        _ => break,
+                    }
+                }
+                let has_content = self
+                    .char_cache
+                    .get(i)
+                    .map_or(false, |c| !matches!(c, '\n' | '\r'));
+                if has_content {
+                    let parent_indent = self.indent_stack.last().copied().unwrap_or(0);
+                    if probe <= parent_indent {
+                        return Err(Error::scan(
+                            self.position,
+                            "Flow content line is not indented enough".to_string(),
+                        ));
+                    }
+                }
+            }
             return Ok(());
         }
 

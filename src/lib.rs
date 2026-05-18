@@ -466,6 +466,47 @@ prod: *base
         );
     }
 
+    /// `top1: &node1\n  &k1 key1: one` — `&node1` belongs to the inner
+    /// mapping (value of `top1`), and `&k1` belongs to the key `key1`
+    /// inside that mapping. These are two different nodes, so the parser
+    /// must NOT raise "more than one anchor". yaml-test-suite 7BMT.
+    #[test]
+    fn test_anchor_on_value_mapping_then_anchor_on_inner_key() {
+        let yaml = "top1: &node1\n  &k1 key1: one\n";
+        let mut parser = BasicParser::new_eager(yaml.to_string());
+        let mut events = Vec::new();
+        while parser.check_event() {
+            match parser.get_event() {
+                Ok(Some(event)) => events.push(event),
+                Ok(None) => break,
+                Err(e) => panic!("parser error: {e:?}"),
+            }
+        }
+        // Outer mapping has no anchor; inner mapping has &node1.
+        let mapping_anchors: Vec<Option<String>> = events
+            .iter()
+            .filter_map(|e| match &e.event_type {
+                EventType::MappingStart { anchor, .. } => Some(anchor.clone()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            mapping_anchors,
+            vec![None, Some("node1".to_string())],
+            "Expected [outer=None, inner=node1]; got {mapping_anchors:?}"
+        );
+        // Inner key scalar "key1" carries anchor &k1.
+        let key1 = events.iter().find_map(|e| match &e.event_type {
+            EventType::Scalar { value, anchor, .. } if value == "key1" => Some(anchor.clone()),
+            _ => None,
+        });
+        assert_eq!(
+            key1,
+            Some(Some("k1".to_string())),
+            "Expected &k1 on key1; got {key1:?}"
+        );
+    }
+
     /// A line beginning with `:` denotes a mapping entry with an implicit
     /// empty key. The parser must open a block mapping (if not already in
     /// one) and synthesise the empty key. yaml-test-suite case 2JQS.

@@ -1753,8 +1753,21 @@ impl BasicScanner {
                     self.tokens.push(token);
                 }
 
-                // Anchors and aliases
+                // Anchors and aliases. §6.9: a node's properties
+                // (anchor/tag) are prefixes of the node. When an `&` is
+                // at the start of a line (column == current_indent + 1)
+                // and a `: ` follows on the same line, the anchor is
+                // part of an implicit key's properties. The block
+                // mapping that contains this key therefore opens at the
+                // anchor's column, *before* the `&` token is emitted
+                // (yaml-test-suite 7BMT, 6BFJ, 9KAX, U3XV, 26DV).
                 '&' => {
+                    if self.flow_level == 0
+                        && self.position.column == self.current_indent + 1
+                        && self.check_for_mapping_ahead()
+                    {
+                        self.maybe_open_block_mapping_for_key()?;
+                    }
                     let token = self.scan_anchor()?;
                     self.tokens.push(token);
                 }

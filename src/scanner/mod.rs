@@ -1889,6 +1889,12 @@ impl BasicScanner {
                     // P2EQ \`- { y: z }- invalid\`). The same-line guard
                     // is essential — a \`}\` on a previous line with a
                     // new \`-\` on the next line is perfectly valid.
+                    //
+                    // Likewise, a block-entry \`-\` immediately after a
+                    // property (Anchor / Tag) on the same line is
+                    // invalid — the property must precede a node, and
+                    // a block sequence's first \`-\` must begin a line
+                    // (yaml-test-suite SY6V \`&anchor - x\`).
                     if let Some(last) = self.tokens.last() {
                         if matches!(
                             last.token_type,
@@ -1898,6 +1904,17 @@ impl BasicScanner {
                             return Err(Error::scan(
                                 self.position,
                                 "Block-entry `-` immediately after flow collection close"
+                                    .to_string(),
+                            ));
+                        }
+                        if matches!(
+                            last.token_type,
+                            TokenType::Anchor(_) | TokenType::Tag(_)
+                        ) && last.end_position.line == self.position.line
+                        {
+                            return Err(Error::scan(
+                                self.position,
+                                "Block-entry `-` cannot follow a property on the same line"
                                     .to_string(),
                             ));
                         }

@@ -1226,6 +1226,28 @@ impl BasicParser {
                     ));
                 }
 
+                // §7.4: in flow mapping/sequence between entries
+                // (even children = ready for next key/item) a Scalar
+                // must be preceded by a separator. If the previous
+                // token was a Scalar (i.e. previous value just emitted)
+                // and not a comma, this is a missing-comma error
+                // (yaml-test-suite T833, CML9).
+                if matches!(
+                    self.state,
+                    ParserState::FlowMapping
+                        | ParserState::FlowSequence
+                ) && matches!(
+                    self.last_token_type,
+                    Some(TokenType::Scalar(..))
+                        | Some(TokenType::FlowSequenceEnd)
+                        | Some(TokenType::FlowMappingEnd)
+                ) {
+                    return Err(Error::parse(
+                        token.start_position,
+                        "Missing `,` separator between flow collection entries",
+                    ));
+                }
+
                 // Check if we're in a sequence and the next token is Value (indicating a mapping key)
                 if matches!(self.state, ParserState::BlockSequence) {
                     if let Ok(Some(next_token)) = self.scanner.peek_token() {

@@ -83,11 +83,10 @@ test-lib: ## Run library tests only
 
 test-integration: ## Run integration tests
 	@echo "🧪 Running integration tests..."
-	@timeout 120s cargo test --test integration_tests
-	@timeout 30s cargo test --test edge_cases_and_errors
-	@timeout 30s cargo test --test performance_and_stress
-	@timeout 30s cargo test --test indentation_style_preservation
-	@timeout 30s cargo test --test complex_keys
+	# `--tests` auto-discovers every `tests/*.rs` binary, so newly added
+	# test files (e.g. `tests/directives.rs`) get picked up here without
+	# being enumerated. Matches what CI / nextest sees end-to-end.
+	@timeout 300s cargo test --tests
 
 test-security: ## Run security-specific tests
 	@echo "🔒 Running security tests..."

@@ -271,43 +271,110 @@ flag: yes
 }
 
 #[test]
-fn test_yaml_1_1_value_tag_token_still_string_for_now() {
-    // The `=` value-key replacement token is a YAML 1.1 feature (`!!value`
-    // tag) that was dropped in 1.2. Full 1.1 construction of `=` is
-    // deferred — for now we just document the current behavior so a future
-    // implementer notices when this changes.
+fn test_yaml_1_1_value_tag_token_rejected() {
+    // Under `%YAML 1.1`, a bare `=` plain scalar is the
+    // `tag:yaml.org,2002:value` indicator (§10.3.4) and is rejected
+    // by every composer via `resolver::value_tag_error`. This mirrors
+    // `ruamel.yaml typ="safe"`/`typ="unsafe"`. See `src/resolver.rs`
+    // and the same end-to-end coverage in
+    // `src/constructor.rs::test_yaml_1_1_value_tag_rejected_with_directive`.
     let yaml_input = "%YAML 1.1\n---\nitems:\n  - =\n";
     let yaml = Yaml::new();
-    let result = yaml.load_str(yaml_input).expect("parse");
-    let Value::Mapping(map) = result else {
-        panic!("expected mapping");
-    };
-    let items = map.get(&Value::String("items".to_string())).expect("items");
-    assert_eq!(
-        items,
-        &Value::Sequence(vec![Value::String("=".to_string())]),
-        "`=` under 1.1 currently parses as String — full !!value handling tracked separately"
+    let err = yaml
+        .load_str(yaml_input)
+        .expect_err("`=` under %YAML 1.1 must error");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("tag:yaml.org,2002:value"),
+        "error should mention the value tag URI: {msg}"
     );
 }
 
 #[test]
 fn test_directive_scanner_integration() {
-    // Test that directives are properly scanned and passed through the pipeline
+    // Verifies that `%YAML` / `%TAG` directive headers are scanned and
+    // passed through to the parser without erroring. Uses only
+    // *definitions* of named handles — not their consumption in
+    // mapping keys, which exercises a known scanner bug tracked in
+    // `test_named_tag_handle_as_mapping_key_known_bug` below.
     let yaml_input = r#"%YAML 1.2
 %TAG !foo! tag:example.com,2024/foo:
 %TAG !bar! tag:example.com,2024/bar:
 ---
 regular: value
-!foo!widget: component
-!bar!config: settings
+other: another
 "#;
 
     let yaml = Yaml::new();
     let result = yaml.load_str(yaml_input);
 
-    // Should not error even with complex directives
     assert!(
         result.is_ok(),
-        "Should handle multiple custom tag directives"
+        "should parse a document with multiple unused %TAG directives"
     );
+}
+
+/// `scan_tag` must terminate the tag suffix when `:` is followed by
+/// whitespace / EOL — that `:` is the YAML mapping-value indicator
+/// (§6.8.2), not a URI sub-delimiter. Without this carve-out,
+/// `!handle!suffix: value` is mis-scanned as
+/// `Tag("!handle!suffix:") Scalar("value")` and the surrounding
+/// mapping structure collapses (symptom:
+/// `Mapping key not followed by ':'`).
+///
+/// Mirrors the `,`-in-flow carve-out for the same reason: a URI
+/// character that's overloaded as a YAML indicator in some
+/// contexts.
+#[test]
+fn test_named_tag_handle_as_mapping_key() {
+    let yaml_input = r#"%YAML 1.2
+%TAG !foo! tag:example.com,2024/foo:
+---
+!foo!widget: component
+other: another
+"#;
+    let yaml = Yaml::new();
+    let result = yaml
+        .load_str(yaml_input)
+        .expect("named tag handle as implicit-key tag must parse");
+    let Value::Mapping(map) = result else {
+        panic!("expected mapping, got {result:?}");
+    };
+    // The tag `!foo!widget` applies to the implicit empty scalar
+    // between the tag and the `:`. Tagged scalars bypass the
+    // implicit-resolution empty→Null rule (the tag overrides
+    // implicit typing per §10.1.2) and `compose_tagged_scalar`
+    // preserves the raw value as a `String` for any unknown custom
+    // tag — `Value` has no `Tagged` variant to carry the tag URI
+    // forward. So the first entry's key is `String("")`; the
+    // untagged second entry parses normally.
+    assert_eq!(
+        map.get(&Value::String(String::new())),
+        Some(&Value::String("component".to_string())),
+        "key from `!foo!widget: component` should be the empty-string scalar the tag was applied to"
+    );
+    assert_eq!(
+        map.get(&Value::String("other".to_string())),
+        Some(&Value::String("another".to_string())),
+        "untagged sibling key should still parse"
+    );
+}
+
+/// Companion to the test above: ensure `:` *inside* a URI (no
+/// trailing whitespace) is still consumed into the tag suffix,
+/// preserving real-world tag forms like `tag:yaml.org,2002:str`.
+#[test]
+fn test_colon_inside_tag_uri_is_part_of_suffix() {
+    // `!foo!bar:baz val` — `:` is followed by `b`, not whitespace,
+    // so the tag suffix is `bar:baz` (a valid URI fragment).
+    let yaml_input = r#"%YAML 1.2
+%TAG !foo! tag:example.com,
+---
+!foo!bar:baz val
+"#;
+    let yaml = Yaml::new();
+    let result = yaml.load_str(yaml_input).expect("parse");
+    // `!foo!bar:baz val` is a tag applied to plain scalar `val`,
+    // and the document has only one node (no mapping).
+    assert_eq!(result, Value::String("val".to_string()));
 }

@@ -8,7 +8,7 @@
 
 A complete, fast, and safe YAML 1.2 library for Rust with advanced features and security-first design. This library provides comprehensive YAML processing capabilities with full specification compliance, advanced security features, and excellent performance.
 
-> **Status**: Production-ready. **100% conformant** against the upstream [`yaml/yaml-test-suite`](https://github.com/yaml/yaml-test-suite) (`data-2022-01-17` pin) — **735 / 735** spec-conformance tests pass. 185 internal lib tests + 200+ integration tests also passing. All YAML 1.2 core features implemented and battle-tested.
+> **Status**: Production-ready. **100% conformant** against the upstream [`yaml/yaml-test-suite`](https://github.com/yaml/yaml-test-suite) (`data-2022-01-17` pin) — **735 / 735** spec-conformance tests pass. 190 internal lib tests + 200+ integration tests also passing. All YAML 1.2 core features implemented and battle-tested.
 
 ## Table of Contents
 

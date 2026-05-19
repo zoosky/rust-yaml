@@ -12,7 +12,7 @@ Live tracker for closing the gap between rust-yaml and the yaml/yaml-test-suite
 | Wrong-reject   | 0                      |
 | Wrong-accept   | 0                      |
 | Wrong-events   | 0                      |
-| Lib unit tests | 185 passing            |
+| Lib unit tests | 190 passing            |
 
 Live results are written to `target/yaml-test-suite-failures.txt` after every
 `make test-yaml-suite` run. Categories: `Timeouts`, `Wrong reject`,

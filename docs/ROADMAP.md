@@ -40,7 +40,7 @@ This roadmap outlines the planned improvements and enhancements for rust-yaml, f
 
 **Development Infrastructure**
 
-- 185+ lib unit tests passing
+- 190+ lib unit tests passing
 - 200+ integration tests passing
 - **735 / 735 yaml-test-suite conformance tests passing (100.0%)**
 - Comprehensive security test suite
@@ -54,6 +54,13 @@ This roadmap outlines the planned improvements and enhancements for rust-yaml, f
   68 TDD-driven fixes covering line-start property handling,
   state-machine completeness, indent rules, explicit-key wrapping,
   flow-collection-as-key, and inline single-pair mapping wraps.
+- **YAML 1.1 `=` (`!!value`) tag auto-detection** (§10.3.4):
+  bare `=` under `%YAML 1.1` is now recognized as
+  `tag:yaml.org,2002:value` and rejected with a construction error,
+  matching `ruamel.yaml typ="safe"` / `typ="unsafe"`. Closes the
+  parity gap from [#1](https://github.com/elioetibr/rust-yaml/issues/1).
+  Default 1.2 keeps `=` as a plain string. See
+  [`YAML_1.2.2_COMPLIANCE.md`](YAML_1.2.2_COMPLIANCE.md).
 - Strict clippy gate (`-D warnings -D pedantic` with curated allow-list)
   now blocking — every fix must pass `make ci` before merge.
 

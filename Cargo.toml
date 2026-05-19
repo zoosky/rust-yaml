@@ -1,6 +1,6 @@
 [package]
 name = "rust-yaml"
-version = "0.0.5"
+version = "1.0.0"
 authors = ["Elio Severo Junior <elioseverojunior@gmail.com>"]
 edition = "2024"
 rust-version = "1.85"
@@ -97,6 +97,17 @@ required-features = []
 # in the bench profile; unit tests still run under `cargo test`.
 bench = false
 
+# Explicit binary target for the demo (`src/main.rs`). Cargo would
+# auto-discover this otherwise — and the auto-discovered target
+# defaults to `bench = true`, which makes `cargo bench` invoke
+# libtest's harness on it (same `--output-format` rejection as `[lib]`
+# above). Declaring it here lets us flip `bench = false` so only the
+# real `[[bench]]` targets run under `cargo bench`.
+[[bin]]
+name = "rust-yaml"
+path = "src/main.rs"
+bench = false
+
 [[example]]
 name = "library_comparison"
 
@@ -158,7 +169,7 @@ tokio = { version = "1.40", features = ["fs", "io-util", "rt"], optional = true 
 
 [dev-dependencies]
 # Testing and benchmarking
-criterion = { version = "0.7", features = ["html_reports"] }
+criterion = { version = "0.8", features = ["html_reports"] }
 pretty_assertions = "1.4"
 proptest = "1.2"
 tempfile = "3.8"

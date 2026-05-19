@@ -2649,6 +2649,23 @@ impl BasicScanner {
                 if self.flow_level > 0 && matches!(ch, '[' | ']' | '{' | '}') {
                     break;
                 }
+                // §6.8 / §5.6: `:` IS a valid tag URI character — e.g.
+                // `tag:yaml.org,2002:str` legitimately contains two
+                // colons inside its URI. But a `:` followed by
+                // whitespace, EOL or EOF is the YAML mapping-value
+                // indicator and MUST terminate the tag, otherwise
+                // `!handle!suffix: value` is mis-scanned as
+                // `Tag("!handle!suffix:") Scalar("value")` and the
+                // implicit-key mapping structure is lost. Mirrors the
+                // `,` carve-out above (a valid URI char that's also a
+                // YAML flow indicator in some contexts).
+                if ch == ':' {
+                    match self.peek_char(1) {
+                        None => break,
+                        Some(c) if c.is_whitespace() => break,
+                        _ => {}
+                    }
+                }
                 if ch.is_alphanumeric() || "-._~:/?#[]@!$&'()*+;=%".contains(ch) {
                     tag.push(ch);
                     self.advance();

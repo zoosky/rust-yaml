@@ -43,24 +43,19 @@ This document covers the development workflow, tools, and processes for the rust
 
 ## Prerequisites
 
-### Node.js Version Management
+### Commit Message Linter
 
-This project uses Node.js for development tools like commitlint. The required Node.js version is specified in `.nvmrc`.
-
-**Using nvm (recommended)**:
+This project enforces [Conventional Commits](https://www.conventionalcommits.org/) via [`committed`](https://github.com/crate-ci/committed) — a Rust-native linter. No Node.js is required.
 
 ```bash
-# Install and use the correct Node.js version
-nvm install
-nvm use
+# Install (fast, prebuilt binary):
+cargo binstall committed
+
+# Or build from source:
+cargo install committed
 ```
 
-**Using volta**:
-
-```bash
-# Volta will automatically use the version from .nvmrc
-volta install node
-```
+Rules live in [`committed.toml`](../committed.toml).
 
 **Manual setup**:
 
@@ -170,9 +165,9 @@ Runs only when `[skip ci]` is detected:
 
 Validates commit messages:
 
-- **Conventional commit** format checking
-- **PR comment** with help on validation failure
-- **Multiple validation methods** (commitlint + custom)
+- **Conventional commit** format checking via [`committed`](https://github.com/crate-ci/committed)
+- **PR comment** with help and reproduction snippet on validation failure
+- **Single source of truth** in [`committed.toml`](../committed.toml)
 
 ### Release Process (`.github/workflows/release.yml`)
 
@@ -198,7 +193,7 @@ Triggered by version tags (e.g., `v1.2.3`):
 
 ### Optional Tools
 
-- **Node.js + npm** for commitlint (enhanced commit validation)
+- **`committed`** for Conventional Commits validation (`cargo install committed`)
 - **cargo-tarpaulin** for code coverage
 - **cargo-criterion** for benchmarking
 - **cargo-audit** for security scanning
@@ -209,7 +204,7 @@ The project includes a comprehensive Makefile with 60+ commands. Run `make setup
 
 - Configure git hooks for commit message validation
 - Set up conventional commit template
-- Install commitlint (if Node.js available)
+- Install `committed` (if not already on PATH)
 - Verify Rust toolchain components (rustfmt, clippy)
 - Configure git aliases
 
@@ -338,8 +333,8 @@ cargo clippy --all-targets --all-features -- -D warnings
 ls -la .githooks/
 git config --get core.hooksPath
 
-# Test commitlint
-echo "feat: test message" | npx commitlint
+# Test the commit-message linter
+echo "feat: test message" | committed --commit-file -
 
 # Check GitVersion (if installed locally)
 gitversion /output buildmetadata /output json

@@ -53,15 +53,11 @@ exclude = [
   "Thumbs.db",
   # Benchmarks (optional, include if you want them in the package)
   "benches/",
-  "commitlint.config.js",
+  "committed.toml",
   "deny.toml",
   # Documentation and community files
   "docs/",
   "lcov.info",
-  # Node.js/JavaScript files
-  "node_modules/",
-  "package-lock.json",
-  "package.json",
   # Build artifacts and caches
   "target/",
   # Test files (tests/ should be included for cargo test)

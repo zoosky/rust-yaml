@@ -67,7 +67,7 @@ This will:
 
 - Configure git hooks for commit message validation
 - Set up conventional commit template
-- Install commitlint dependencies (if Node.js available)
+- Install `committed` (Rust-native Conventional Commits linter) if missing
 - Verify Rust toolchain and components
 - Run initial project checks
 - Configure helpful git aliases

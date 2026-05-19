@@ -12,29 +12,20 @@ help: ## Show this help message
 setup: ## Set up development environment (git hooks, dependencies, etc.)
 	@echo "🔧 Setting up development environment..."
 	@if [ ! -d ".githooks" ]; then mkdir -p .githooks; fi
-	@if [ ! -f ".githooks/commit-msg" ]; then \
-		echo "📝 Creating commit message hook..."; \
-		echo "#!/bin/bash" > .githooks/commit-msg; \
-		echo "# Validate commit message format" >> .githooks/commit-msg; \
-		echo "if command -v npx >/dev/null 2>&1 && [ -f package.json ]; then" >> .githooks/commit-msg; \
-		echo "  npx commitlint --edit \$$1" >> .githooks/commit-msg; \
-		echo "else" >> .githooks/commit-msg; \
-		echo "  if ! grep -qE '^(feat|fix|docs|style|refactor|test|chore|perf|ci|build|revert)(\\(.+\\))?: .+' \$$1; then" >> .githooks/commit-msg; \
-		echo "    echo 'Invalid commit message format. Use: type(scope): description'" >> .githooks/commit-msg; \
-		echo "    exit 1" >> .githooks/commit-msg; \
-		echo "  fi" >> .githooks/commit-msg; \
-		echo "fi" >> .githooks/commit-msg; \
-		chmod +x .githooks/commit-msg; \
-	fi
+	@if [ -f ".githooks/commit-msg" ]; then chmod +x .githooks/commit-msg; fi
 	@echo "🔗 Configuring git hooks..."
 	@git config --local core.hooksPath .githooks
 	@if [ -f ".gitmessage" ]; then \
 		echo "📋 Setting commit message template..."; \
 		git config --local commit.template .gitmessage; \
 	fi
-	@if command -v npm >/dev/null 2>&1 && [ -f package.json ]; then \
-		echo "📦 Installing Node.js dependencies..."; \
-		npm install; \
+	@if ! command -v committed >/dev/null 2>&1; then \
+		echo "📦 Installing committed (Conventional Commits linter)..."; \
+		if command -v cargo-binstall >/dev/null 2>&1; then \
+			cargo binstall -y committed; \
+		else \
+			cargo install committed; \
+		fi; \
 	fi
 	@echo "🦀 Checking Rust components..."
 	@if ! rustup component list --installed | grep -q rustfmt; then rustup component add rustfmt; fi
@@ -350,20 +341,17 @@ pre-push: ## Run pre-push checks
 	@echo "✅ Pre-push checks passed"
 
 # Commit Message Validation
-commit-lint: ## Test commit message format
+commit-lint: ## Test commit message format (via committed)
 	@echo "📝 Testing commit message format..."
 	@if [ -z "$(MSG)" ]; then \
 		echo "Usage: make commit-lint MSG='feat: add new feature'"; \
 		exit 1; \
 	fi
-	@echo "$(MSG)" | if command -v npx >/dev/null 2>&1 && [ -f package.json ]; then \
-		npx commitlint; \
-	else \
-		if ! grep -qE '^(feat|fix|docs|style|refactor|test|chore|perf|ci|build|revert)(\(.+\))?: .+' -; then \
-			echo 'Invalid commit message format. Use: type(scope): description'; \
-			exit 1; \
-		fi; \
+	@if ! command -v committed >/dev/null 2>&1; then \
+		echo "❌ committed not found. Install with: cargo install committed"; \
+		exit 1; \
 	fi
+	@printf '%s\n' "$(MSG)" | committed --commit-file -
 	@echo "✅ Commit message format is valid"
 
 # Git Workflow Helpers
@@ -442,8 +430,7 @@ debug-env: ## Show development environment information
 	@echo "🔍 Development Environment:"
 	@echo "Rust version: $$(rustc --version)"
 	@echo "Cargo version: $$(cargo --version)"
-	@if command -v node >/dev/null; then echo "Node.js version: $$(node --version)"; fi
-	@if command -v npm >/dev/null; then echo "npm version: $$(npm --version)"; fi
+	@if command -v committed >/dev/null; then echo "committed version: $$(committed --version)"; fi
 	@echo "Git hooks path: $$(git config --get core.hooksPath || echo 'default')"
 	@echo "Commit template: $$(git config --get commit.template || echo 'none')"
 

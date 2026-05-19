@@ -16,20 +16,25 @@
 #   ci       (changes to CI configuration files and scripts)
 #   build    (changes that affect the build system or external dependencies)
 #   revert   (reverts a previous commit)
+#   release  (release / version-bump commit)
+#   init     (bootstrap / initial commit)
 #
-# Scope is optional and can be:
-#   parser, emitter, scanner, composer, constructor, lib, cli, docs, tests, etc.
+# Scope is optional and is informational (not gated) — e.g.:
+#   parser, emitter, scanner, composer, constructor, lib, cli, docs,
+#   tests, ci, deps, makefile, commitlint, 1.1, 1.0.0, etc.
+#
+# Append `!` after the type/scope for a breaking change:
+#   feat(api)!: drop legacy endpoint
 #
 # Subject line:
-#   - use imperative, present tense: "change" not "changed" nor "changes"
-#   - don't capitalize first letter
+#   - lowercase first letter
 #   - no dot (.) at the end
-#   - 50 characters or less
+#   - 72 characters or less
+#   - rules enforced by `committed` (see committed.toml)
 #
 # Body:
-#   - use imperative, present tense
 #   - include motivation for the change and contrasts with previous behavior
-#   - wrap at 72 characters
+#   - wrap at 100 characters
 #
 # Footer:
 #   - reference GitHub issues: "Closes #123", "Fixes #456"

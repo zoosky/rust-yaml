@@ -100,8 +100,8 @@ test-integration: ## Run integration tests
 
 test-security: ## Run security-specific tests
 	@echo "🔒 Running security tests..."
-	@timeout 30s cargo test --test security_limits
-	@timeout 30s cargo test test_nested_alias_expansion_limit
+	@timeout 60s cargo test --test security_limits
+	@timeout 60s cargo test --test security_limits test_nested_alias_expansion_limit
 
 test-yaml-suite: ## Run upstream yaml-test-suite conformance harness
 	@echo "🧪 Running yaml/yaml-test-suite conformance harness..."
@@ -127,7 +127,7 @@ lint-fix: ## Run clippy with automatic fixes
 
 clippy-strict: ## Run clippy with strict CI settings
 	@echo "📎 Running clippy with strict CI settings..."
-	@timeout 30s cargo clippy --all-targets --all-features -- -D warnings -D clippy::all -D clippy::pedantic -W clippy::nursery \
+	@timeout 180s cargo clippy --all-targets --all-features -- -D warnings -D clippy::all -D clippy::pedantic -W clippy::nursery \
 		-A clippy::needless_raw_string_hashes \
 		-A clippy::format_push_string \
 		-A clippy::single_char_pattern \

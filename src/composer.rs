@@ -1,6 +1,6 @@
 //! YAML composer for converting events to nodes
 
-use crate::resolver::{PlainScalarType, resolve_plain_scalar};
+use crate::resolver::{PlainScalarType, resolve_plain_scalar, value_tag_error};
 #[cfg(test)]
 use crate::scanner::Scanner;
 use crate::tag::TagResolver;
@@ -187,7 +187,7 @@ impl BasicComposer {
                     self.compose_tagged_scalar(value, tag_str)?
                 } else {
                     // Use implicit typing
-                    self.compose_scalar(value, style)?
+                    self.compose_scalar(value, style, event.position)?
                 };
 
                 // Store anchor if present
@@ -300,7 +300,15 @@ impl BasicComposer {
     /// Plain, literal, and folded scalars go through the shared
     /// [`resolve_plain_scalar`] helper so the YAML version (1.1 vs 1.2)
     /// governs which boolean forms are recognized.
-    fn compose_scalar(&self, value: String, style: crate::parser::ScalarStyle) -> Result<Value> {
+    ///
+    /// `position` is the scalar's source position, used only to anchor
+    /// the error returned for the YAML 1.1 `!!value` (`=`) tag.
+    fn compose_scalar(
+        &self,
+        value: String,
+        style: crate::parser::ScalarStyle,
+        position: crate::Position,
+    ) -> Result<Value> {
         match style {
             crate::parser::ScalarStyle::SingleQuoted | crate::parser::ScalarStyle::DoubleQuoted => {
                 return Ok(Value::String(value));
@@ -314,6 +322,7 @@ impl BasicComposer {
             PlainScalarType::Int(i) => Value::Int(i),
             PlainScalarType::Float(f) => Value::Float(f),
             PlainScalarType::Str => Value::String(value),
+            PlainScalarType::Value => return Err(value_tag_error(position)),
         })
     }
 

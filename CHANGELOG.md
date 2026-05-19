@@ -24,6 +24,13 @@ official test corpus.
 - **YAML 1.1 `%YAML` directive honored** for plain-scalar resolution: when
   `%YAML 1.1` is in effect, `yes`/`no`/`on`/`off` resolve as booleans;
   default `1.2` keeps them as strings.
+- **YAML 1.1 `=` (`!!value`) tag auto-detection** (§10.3.4): a bare `=`
+  plain scalar under `%YAML 1.1` is now recognized as the
+  `tag:yaml.org,2002:value` indicator and rejected with a construction
+  error — closes the parity gap with `ruamel.yaml typ="safe"` /
+  `typ="unsafe"` reported in [#1](https://github.com/elioetibr/rust-yaml/issues/1).
+  Default 1.2 keeps `=` as a plain string (1.2 dropped the tag from
+  Core Schema). Quoted `'='` / `"="` are always strings, in any version.
 - **Per-document `%TAG` directive scope** (§6.8): directives apply to one
   document only; the resolver resets across `---` boundaries.
 - **Named-tag-handle validation**: `!prefix!suffix` without a matching

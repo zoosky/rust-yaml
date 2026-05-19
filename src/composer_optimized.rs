@@ -234,6 +234,9 @@ impl ReducedAllocComposer {
                 crate::resolver::PlainScalarType::Int(i) => OptimizedValue::Int(i),
                 crate::resolver::PlainScalarType::Float(f) => OptimizedValue::Float(f),
                 crate::resolver::PlainScalarType::Str => OptimizedValue::string(value),
+                crate::resolver::PlainScalarType::Value => {
+                    return Err(crate::resolver::value_tag_error(self.position));
+                }
             },
         )
     }

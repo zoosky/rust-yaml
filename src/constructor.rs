@@ -440,4 +440,50 @@ mod tests {
             assert_eq!(result, Value::Null, "Failed for input: {}", input);
         }
     }
+
+    /// YAML 1.1 §10.3.4 — bare `=` is the `tag:yaml.org,2002:value`
+    /// indicator. Under `%YAML 1.1` we surface this as a construction
+    /// error (matching `ruamel.yaml typ="safe"`/`typ="unsafe"`); under
+    /// default 1.2 we keep the historical behavior of treating `=` as a
+    /// plain string (the 1.2 Core Schema dropped the tag).
+    #[test]
+    fn test_yaml_1_1_value_tag_rejected_with_directive() {
+        let input = "%YAML 1.1\n---\n- =\n";
+        let mut constructor = SafeConstructor::new(input.to_string());
+        let err = constructor
+            .construct()
+            .expect_err("`= ` under %YAML 1.1 must error");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("tag:yaml.org,2002:value") && msg.contains("=`"),
+            "error should mention the value tag and the `=` indicator: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_yaml_1_2_default_treats_equals_as_string() {
+        // No `%YAML 1.1` directive → default 1.2 → `=` is a plain string.
+        let input = "- =\n";
+        let mut constructor = SafeConstructor::new(input.to_string());
+        let result = constructor.construct().unwrap().unwrap();
+        assert_eq!(
+            result,
+            Value::Sequence(vec![Value::String("=".to_string())]),
+            "default 1.2 should keep `=` as a plain string"
+        );
+    }
+
+    #[test]
+    fn test_yaml_1_1_quoted_equals_still_string() {
+        // Even under %YAML 1.1, a *quoted* `=` is just a string — the
+        // resolver only runs on plain scalars.
+        let input = "%YAML 1.1\n---\n- '='\n";
+        let mut constructor = SafeConstructor::new(input.to_string());
+        let result = constructor.construct().unwrap().unwrap();
+        assert_eq!(
+            result,
+            Value::Sequence(vec![Value::String("=".to_string())]),
+            "quoted `=` should never trigger the value-tag detection"
+        );
+    }
 }

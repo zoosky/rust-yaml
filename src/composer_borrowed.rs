@@ -235,6 +235,9 @@ impl<'a> ZeroCopyComposer<'a> {
                 crate::resolver::PlainScalarType::Str => {
                     BorrowedValue::owned_string(value.to_string())
                 }
+                crate::resolver::PlainScalarType::Value => {
+                    return Err(crate::resolver::value_tag_error(self.position));
+                }
             },
         )
     }

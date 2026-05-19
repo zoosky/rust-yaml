@@ -175,7 +175,7 @@ impl CommentPreservingComposer {
         position: Position,
     ) -> Result<Option<CommentedValue>> {
         // Resolve the scalar type properly
-        let resolved_value = self.resolve_scalar_type(value);
+        let resolved_value = self.resolve_scalar_type(value, position)?;
 
         let commented_value = CommentedValue {
             value: resolved_value,
@@ -192,14 +192,24 @@ impl CommentPreservingComposer {
     }
 
     /// Resolve scalar type from string value (version-aware).
-    fn resolve_scalar_type(&self, value: String) -> Value {
-        match crate::resolver::resolve_plain_scalar(&value, self.yaml_version) {
-            crate::resolver::PlainScalarType::Null => Value::Null,
-            crate::resolver::PlainScalarType::Bool(b) => Value::Bool(b),
-            crate::resolver::PlainScalarType::Int(i) => Value::Int(i),
-            crate::resolver::PlainScalarType::Float(f) => Value::Float(f),
-            crate::resolver::PlainScalarType::Str => Value::String(value),
-        }
+    ///
+    /// Returns `Err` when the YAML 1.1 `=` value tag is detected — the
+    /// `CommentedValue` tree has no tagged-scalar representation, so we
+    /// surface the same error as the other composers (matches
+    /// `ruamel.yaml typ="safe"`).
+    fn resolve_scalar_type(&self, value: String, position: Position) -> Result<Value> {
+        Ok(
+            match crate::resolver::resolve_plain_scalar(&value, self.yaml_version) {
+                crate::resolver::PlainScalarType::Null => Value::Null,
+                crate::resolver::PlainScalarType::Bool(b) => Value::Bool(b),
+                crate::resolver::PlainScalarType::Int(i) => Value::Int(i),
+                crate::resolver::PlainScalarType::Float(f) => Value::Float(f),
+                crate::resolver::PlainScalarType::Str => Value::String(value),
+                crate::resolver::PlainScalarType::Value => {
+                    return Err(crate::resolver::value_tag_error(position));
+                }
+            },
+        )
     }
 
     /// Compose a sequence

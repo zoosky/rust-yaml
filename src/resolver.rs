@@ -1,7 +1,24 @@
 //! YAML resolver for tag resolution and implicit typing
 
 use crate::version::YamlVersion;
+use crate::{Error, Position};
 use std::collections::HashMap;
+
+/// Build the error returned when the resolver detects the YAML 1.1
+/// `tag:yaml.org,2002:value` indicator (`=`).
+///
+/// Centralized so all composers report the same message — matches the
+/// `ConstructorError` raised by `ruamel.yaml` typ="safe" / typ="unsafe".
+/// See YAML 1.1 §10.3.4 — <https://yaml.org/spec/1.1/#id903992>.
+#[must_use]
+pub fn value_tag_error(position: Position) -> Error {
+    Error::construction(
+        position,
+        "the YAML 1.1 `=` indicator (tag:yaml.org,2002:value) has no \
+         constructor in rust-yaml; drop the `%YAML 1.1` directive or \
+         quote the value (`'='`) to keep it as a string",
+    )
+}
 
 /// Result of resolving a plain (unquoted) scalar to a YAML type.
 ///
@@ -20,6 +37,14 @@ pub enum PlainScalarType {
     Float(f64),
     /// Falls through to a string — the caller keeps the original input.
     Str,
+    /// YAML 1.1 `tag:yaml.org,2002:value` (the bare `=` indicator,
+    /// §10.3.4 of the 1.1 spec). Dropped from the 1.2 Core Schema, so
+    /// the resolver only emits this under a `%YAML 1.1` directive.
+    /// Composers should reject it — there is no `Value` variant in the
+    /// user-facing tree to construct it into. This mirrors
+    /// `ruamel.yaml typ="safe"` / `typ="unsafe"`, both of which raise
+    /// `ConstructorError`.
+    Value,
 }
 
 /// Resolve a plain scalar to a [`PlainScalarType`] under the given
@@ -45,6 +70,13 @@ pub fn resolve_plain_scalar(value: &str, version: YamlVersion) -> PlainScalarTyp
 
     if let Ok(f) = value.parse::<f64>() {
         return PlainScalarType::Float(f);
+    }
+
+    // YAML 1.1 §10.3.4: bare `=` is the `tag:yaml.org,2002:value`
+    // indicator. Case-sensitive (only literal `=`), and the full scalar
+    // must be exactly `=` — `a=b` / `==` / etc. stay as plain strings.
+    if version == YamlVersion::V1_1 && value == "=" {
+        return PlainScalarType::Value;
     }
 
     let lower = value.to_lowercase();
@@ -251,14 +283,38 @@ mod tests {
             resolve_plain_scalar("hello", YamlVersion::V1_2),
             PlainScalarType::Str
         );
+        // YAML 1.2 dropped the `!!value` tag — `=` is a plain string.
         assert_eq!(
             resolve_plain_scalar("=", YamlVersion::V1_2),
             PlainScalarType::Str
         );
+    }
+
+    /// YAML 1.1 §10.3.4 — `=` is the indicator for the
+    /// `tag:yaml.org,2002:value` (Value) tag. The resolver surfaces
+    /// it as a distinct variant so composers can refuse it the way
+    /// `ruamel.yaml` typ="safe" / typ="unsafe" do — see
+    /// <https://yaml.org/spec/1.1/#id903992>.
+    #[test]
+    fn plain_scalar_value_tag_1_1() {
         assert_eq!(
             resolve_plain_scalar("=", YamlVersion::V1_1),
-            PlainScalarType::Str
+            PlainScalarType::Value
         );
+    }
+
+    /// The `=` indicator must be the entire scalar — strings that merely
+    /// contain `=` (`a=b`, `==`, `= `, ` =`) stay as plain strings even
+    /// under 1.1.
+    #[test]
+    fn plain_scalar_value_tag_1_1_only_bare_equals() {
+        for s in ["==", "a=b", "= ", " =", " = "] {
+            assert_eq!(
+                resolve_plain_scalar(s, YamlVersion::V1_1),
+                PlainScalarType::Str,
+                "{s:?} should fall through to Str — only bare `=` is the value tag"
+            );
+        }
     }
 
     #[test]

@@ -419,7 +419,7 @@ name: "User One"
 email: "user1@example.com"
 age: 25
 ---
-name: "User Two"  
+name: "User Two"
 email: "user2@example.com"
 age: 35
 ---

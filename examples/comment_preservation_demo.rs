@@ -53,20 +53,20 @@ server:
   # Network settings
   host: "localhost"    # Bind to localhost for development
   port: 8080          # Standard HTTP port
-  
+
   # Security settings
   ssl:
     enabled: true     # Enable HTTPS in production
     cert: "/etc/ssl/cert.pem"  # Certificate file path
     key: "/etc/ssl/key.pem"    # Private key file path
 
-# Database Configuration  
+# Database Configuration
 database:
   # Connection details
   host: "db.example.com"  # Database server hostname
   port: 5432             # PostgreSQL default port
   name: "myapp_prod"     # Production database name
-  
+
   # Connection pool settings
   pool:
     min_connections: 5   # Minimum pool size
@@ -79,7 +79,7 @@ features:
   - "authentication"  # User login and session management
   - "authorization"   # Role-based access control
   - "audit_logging"   # Security audit trail
-  
+
   # Optional features
   - "metrics"        # Performance monitoring
   - "caching"        # Redis-based caching layer
@@ -91,8 +91,8 @@ monitoring:
     level: "INFO"      # Log level (DEBUG, INFO, WARN, ERROR)
     format: "json"     # Log format (json, text)
     output: "stdout"   # Output destination
-    
-  # Metrics collection  
+
+  # Metrics collection
   metrics:
     enabled: true      # Enable metrics collection
     interval: 60       # Collection interval in seconds
@@ -147,7 +147,7 @@ users:
       - "write"         # Write access
       - "delete"        # Delete access
       - "admin"         # Administrative access
-    
+
   # Regular users
   - name: "john_doe"     # Standard user account
     role: "user"         # Limited access
@@ -155,7 +155,7 @@ users:
     permissions:
       - "read"          # Read-only access
       - "write"         # Can modify own data
-      
+
   - name: "jane_smith"   # Another user account
     role: "moderator"    # Elevated permissions
     active: false        # Temporarily disabled
@@ -172,7 +172,7 @@ settings:
     require_uppercase: true   # Must contain uppercase
     require_numbers: true     # Must contain numbers
     require_symbols: false    # Symbols are optional
-    
+
   # Session management
   session:
     timeout: 3600        # Session timeout in seconds
@@ -219,7 +219,7 @@ database:
     user=dbuser
     password=secret
     sslmode=require
-    
+
   # SQL query templates
   user_query: |         # User lookup query
     SELECT u.id, u.name, u.email, u.created_at
@@ -228,14 +228,14 @@ database:
       AND u.email_verified = true
     ORDER BY u.created_at DESC
     LIMIT 100;
-    
+
   # Application description
   description: >        # Folded block scalar
     This is the main database configuration for the application.
     It includes connection parameters, query templates, and
     other database-related settings that are used throughout
     the application lifecycle.
-    
+
 # Script Configuration
 scripts:
   # Startup script
@@ -244,8 +244,8 @@ scripts:
     export NODE_ENV=production
     export LOG_LEVEL=info
     node server.js
-    
-  # Backup script  
+
+  # Backup script
   backup: |            # Database backup commands
     echo "Starting backup..."
     pg_dump -h localhost -U dbuser myapp > backup_$(date +%Y%m%d).sql
@@ -282,7 +282,7 @@ defaults: &defaults    # Anchor for shared configuration
   timeout: 30         # Request timeout in seconds
   retries: 3          # Number of retry attempts
   log_level: "INFO"   # Default logging level
-  
+
 # Environment-specific configurations
 environments:
   # Development environment
@@ -291,14 +291,14 @@ environments:
     debug: true        # Enable debug mode
     host: "localhost"  # Local development host
     port: 3000        # Development port
-    
-  # Staging environment  
+
+  # Staging environment
   staging:
     <<: *defaults      # Merge default configuration
     debug: false       # Disable debug in staging
     host: "staging.example.com"  # Staging server
     port: 80          # Standard HTTP port
-    
+
   # Production environment
   production:
     <<: *defaults      # Merge default configuration

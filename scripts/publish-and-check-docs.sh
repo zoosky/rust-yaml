@@ -58,10 +58,10 @@ ATTEMPT=0
 while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
     ATTEMPT=$((ATTEMPT + 1))
     echo -n "   Attempt $ATTEMPT/$MAX_ATTEMPTS: "
-    
+
     # Check if docs are available
     HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$DOCS_URL")
-    
+
     if [ "$HTTP_STATUS" = "200" ]; then
         echo "✅ Documentation successfully built!"
         echo "   View at: $DOCS_URL"

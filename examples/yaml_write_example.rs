@@ -22,7 +22,7 @@ database:
   host: localhost
   port: 5432
 
-# API configuration  
+# API configuration
 api:
   <<: *defaults
   host: "0.0.0.0"

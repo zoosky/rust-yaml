@@ -34,13 +34,13 @@ name: "rust-yaml"      # Project name
 version: "1.0.0"       # Current version
 author: "Developer"    # Main author
 
-# Feature Configuration  
+# Feature Configuration
 features:
   # Core features
   - "parsing"          # YAML parsing capability
   - "serialization"    # YAML output generation
   - "validation"       # Schema validation
-  
+
   # Advanced features
   - "comments"         # Comment preservation
   - "anchors"          # Anchor/alias support
@@ -52,7 +52,7 @@ database:
   host: "localhost"    # Database host
   port: 5432          # PostgreSQL port
   name: "appdb"       # Database name
-  
+
   # Pool configuration
   pool:
     min: 5            # Minimum connections
@@ -72,13 +72,13 @@ item_{}:
   name: "Item {}"      # Display name for item {}
   active: true        # Status flag for item {}
   priority: {}        # Priority level (0-9) for item {}
-  
+
   # Advanced properties
   metadata:
     # Creation information
     created: "2024-01-{:02}"  # Creation date for item {}
     creator: "system"    # Creator of item {}
-    
+
     # Processing flags
     processed: false    # Has item {} been processed?
     retries: 0         # Number of retries for item {}
@@ -190,12 +190,12 @@ features: [fast, safe]
 name: "rust-yaml"      # Project name
 version: "1.0.0"       # Current version
 
-# Feature Configuration  
+# Feature Configuration
 features:
   # Core features
   - "parsing"          # YAML parsing
   - "serialization"    # YAML output
-  
+
 # Database Settings
 database:
   # Connection details
@@ -252,7 +252,7 @@ server:
   # Network settings
   host: "localhost"    # Bind address
   port: 8080          # Listen port
-  
+
   # Security settings
   ssl: true           # Enable HTTPS
   cert: "/path/cert"  # Certificate path
@@ -263,11 +263,11 @@ database:
   host: "db.local"    # DB host
   port: 5432         # DB port
   pool_size: 10      # Connection pool size
-  
+
 # Feature flags
 features:
   - "auth"           # Authentication
-  - "metrics"        # Monitoring  
+  - "metrics"        # Monitoring
   - "cache"          # Caching layer
 "#;
 
@@ -403,15 +403,15 @@ application:
   server:
     # Host configuration comment
     host: "localhost"  # Inline host comment
-    # Port configuration comment  
+    # Port configuration comment
     port: 8080        # Inline port comment
-    
+
     # SSL section comment
     ssl:
       # Certificate comments
       enabled: true   # SSL enabled comment
       cert: "/cert"   # Certificate path comment
-      
+
   # Database section comment
   database:
     # Connection comments
@@ -487,13 +487,13 @@ scripts:
     export NODE_ENV=production
     # Start the server
     node server.js
-    
-  # Backup script with comments  
+
+  # Backup script with comments
   backup: >             # Folded block scalar comment
     This is a long description of the backup process
     that spans multiple lines and will be folded into
     a single line when processed by the YAML parser.
-    
+
   # Configuration template
   config_template: |    # Another literal block
     # Generated configuration file

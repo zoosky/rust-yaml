@@ -433,9 +433,9 @@ fn test_round_trip_shared_sequence_value() {
     let output = yaml.dump_str(&value).unwrap();
 
     // The emitter must produce parseable YAML.
-    let reparsed = yaml
-        .load_str(&output)
-        .unwrap_or_else(|e| panic!("emitted YAML must reparse, got error {e:?}\n--- emitted ---\n{output}"));
+    let reparsed = yaml.load_str(&output).unwrap_or_else(|e| {
+        panic!("emitted YAML must reparse, got error {e:?}\n--- emitted ---\n{output}")
+    });
     assert_eq!(value, reparsed, "round-trip mismatch\nemitted:\n{output}");
 }
 
@@ -451,9 +451,9 @@ fn test_round_trip_shared_sequence_as_sequence_item() {
     let outer = Value::Sequence(vec![shared.clone(), shared]);
     let output = yaml.dump_str(&outer).unwrap();
 
-    let reparsed = yaml
-        .load_str(&output)
-        .unwrap_or_else(|e| panic!("emitted YAML must reparse, got error {e:?}\n--- emitted ---\n{output}"));
+    let reparsed = yaml.load_str(&output).unwrap_or_else(|e| {
+        panic!("emitted YAML must reparse, got error {e:?}\n--- emitted ---\n{output}")
+    });
     assert_eq!(outer, reparsed, "round-trip mismatch\nemitted:\n{output}");
 }
 

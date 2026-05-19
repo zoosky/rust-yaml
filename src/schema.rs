@@ -65,7 +65,7 @@ pub enum SchemaRule {
     Required(Vec<String>),
     /// Additional properties allowed for objects
     AdditionalProperties(bool),
-    /// Custom validation function  
+    /// Custom validation function
     Custom(String),
     /// Conditional validation (if-then-else)
     Conditional {

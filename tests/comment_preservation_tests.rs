@@ -64,13 +64,13 @@ application:
   # Application name and version
   name: "MyApp"  # The official name
   version: "1.0.0"  # Semantic versioning
-  
+
   # Server configuration
   server:
     # Network settings
     host: "localhost"  # Bind address
     port: 8080        # Listen port
-    
+
     # SSL configuration
     ssl:
       enabled: true   # Enable HTTPS
@@ -83,7 +83,7 @@ database:
   host: "db.example.com"  # Database host
   port: 5432             # Database port
   name: "myapp"          # Database name
-  
+
   # Connection pool settings
   pool:
     min: 5   # Minimum connections
@@ -143,14 +143,14 @@ users:
   - name: "admin"     # System administrator
     role: "admin"     # Full access
     active: true      # Currently active
-    
-  # Regular users  
+
+  # Regular users
   - name: "user1"     # First user
     role: "user"      # Limited access
     active: true      # Currently active
-    
+
   - name: "user2"     # Second user
-    role: "user"      # Limited access  
+    role: "user"      # Limited access
     active: false     # Inactive account
 
 # Configuration settings
@@ -202,14 +202,14 @@ config:
     FROM users
     WHERE active = true
     ORDER BY name
-  
-  # Application description  
+
+  # Application description
   description: >  # Folded block scalar
     This is a long description that will be
     folded into a single line when processed,
     making it easier to read in the YAML file
     while maintaining proper formatting.
-    
+
   # Simple configuration values
   debug: true      # Enable debug mode
   timeout: 30      # Request timeout in seconds
@@ -262,13 +262,13 @@ development:
   <<: *defaults       # Merge defaults
   debug: true         # Override debug for dev
   host: "localhost"   # Dev host
-  
-# Production environment  
+
+# Production environment
 production:
   <<: *defaults       # Merge defaults
   host: "prod.example.com"  # Production host
   ssl: true          # Enable SSL in production
-  
+
 # Testing environment
 testing:
   <<: *defaults       # Merge defaults
@@ -399,7 +399,7 @@ fn test_comment_preservation_multi_document() {
 name: "service-a"  # Service name
 port: 8080        # Listen port
 ---
-# Second document  
+# Second document
 # Configuration for service B
 name: "service-b"  # Service name
 port: 8081        # Listen port
@@ -456,7 +456,7 @@ fn test_comment_preservation_performance() {
             format!(
                 r#"
 # Configuration item {}
-item_{}: 
+item_{}:
   # Sub-item properties
   id: {}          # Unique identifier
   name: "Item {}"  # Display name

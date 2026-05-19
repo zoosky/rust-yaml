@@ -496,11 +496,7 @@ impl BasicEmitter {
     /// Handles anchor/alias placement so anchored block collections render as
     /// `- &anchor` followed by their body on the next lines (avoiding the
     /// invalid `&anchor   - item` pattern the scanner rejects).
-    fn emit_sequence_item_body<W: Write>(
-        &mut self,
-        item: &Value,
-        writer: &mut W,
-    ) -> Result<()> {
+    fn emit_sequence_item_body<W: Write>(&mut self, item: &Value, writer: &mut W) -> Result<()> {
         match item {
             Value::Sequence(seq) if seq.is_empty() => {
                 write!(writer, "[]")?;

@@ -485,32 +485,136 @@ impl BasicEmitter {
             }
             self.write_indent(writer)?;
             write!(writer, "- ")?;
+            self.emit_sequence_item_body(item, writer)?;
+        }
 
-            match item {
-                Value::Sequence(seq) if seq.is_empty() => {
-                    write!(writer, "[]")?;
+        Ok(())
+    }
+
+    /// Emit a sequence item after the caller has written `- ` at the proper indent.
+    ///
+    /// Handles anchor/alias placement so anchored block collections render as
+    /// `- &anchor` followed by their body on the next lines (avoiding the
+    /// invalid `&anchor   - item` pattern the scanner rejects).
+    fn emit_sequence_item_body<W: Write>(
+        &mut self,
+        item: &Value,
+        writer: &mut W,
+    ) -> Result<()> {
+        match item {
+            Value::Sequence(seq) if seq.is_empty() => {
+                write!(writer, "[]")?;
+                return Ok(());
+            }
+            Value::Mapping(map) if map.is_empty() => {
+                write!(writer, "{{}}")?;
+                return Ok(());
+            }
+            _ => {}
+        }
+
+        if matches!(item, Value::Sequence(_) | Value::Mapping(_)) {
+            if let Some(info) = self.shared_values.get(item).cloned() {
+                if !info.first_occurrence {
+                    write!(writer, "*{}", info.anchor_name)?;
+                    return Ok(());
                 }
-                Value::Mapping(map) if map.is_empty() => {
-                    write!(writer, "{{}}")?;
+                writeln!(writer, "&{}", info.anchor_name)?;
+                if let Some(info_mut) = self.shared_values.get_mut(item) {
+                    info_mut.first_occurrence = false;
                 }
-                Value::Mapping(map) => {
-                    // Emit mapping inline: first entry on same line as "- "
-                    self.current_indent += self.indent;
-                    self.emit_mapping_inner(map, writer, true)?;
-                    self.current_indent -= self.indent;
+                self.current_indent += self.indent;
+                match item {
+                    Value::Sequence(s) => self.emit_sequence(s, writer)?,
+                    Value::Mapping(m) => self.emit_mapping(m, writer)?,
+                    _ => unreachable!(),
                 }
-                Value::Sequence(_) => {
-                    writeln!(writer)?;
-                    self.current_indent += self.indent;
-                    self.emit_value(item, writer)?;
-                    self.current_indent -= self.indent;
-                }
-                _ => {
-                    self.emit_scalar(item, writer)?;
-                }
+                self.current_indent -= self.indent;
+                return Ok(());
             }
         }
 
+        match item {
+            Value::Mapping(map) => {
+                self.current_indent += self.indent;
+                self.emit_mapping_inner(map, writer, true)?;
+                self.current_indent -= self.indent;
+            }
+            Value::Sequence(_) => {
+                writeln!(writer)?;
+                self.current_indent += self.indent;
+                self.emit_value(item, writer)?;
+                self.current_indent -= self.indent;
+            }
+            _ => {
+                self.emit_scalar(item, writer)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Emit the value portion of a mapping pair. Caller has already written the key.
+    ///
+    /// Handles anchor/alias placement so anchored block collections render as
+    /// `key: &anchor` followed by their body on the next lines, and aliases as
+    /// `key: *anchor` on the same line.
+    fn emit_pair_value<W: Write>(&mut self, value: &Value, writer: &mut W) -> Result<()> {
+        match value {
+            Value::Sequence(seq) if seq.is_empty() => {
+                write!(writer, ": []")?;
+                return Ok(());
+            }
+            Value::Mapping(map) if map.is_empty() => {
+                write!(writer, ": {{}}")?;
+                return Ok(());
+            }
+            _ => {}
+        }
+
+        if matches!(value, Value::Sequence(_) | Value::Mapping(_)) {
+            if let Some(info) = self.shared_values.get(value).cloned() {
+                if !info.first_occurrence {
+                    write!(writer, ": *{}", info.anchor_name)?;
+                    return Ok(());
+                }
+                writeln!(writer, ": &{}", info.anchor_name)?;
+                if let Some(info_mut) = self.shared_values.get_mut(value) {
+                    info_mut.first_occurrence = false;
+                }
+                let bump = match value {
+                    Value::Sequence(_) => self.effective_sequence_indent(),
+                    _ => self.indent,
+                };
+                self.current_indent += bump;
+                match value {
+                    Value::Sequence(s) => self.emit_sequence(s, writer)?,
+                    Value::Mapping(m) => self.emit_mapping(m, writer)?,
+                    _ => unreachable!(),
+                }
+                self.current_indent -= bump;
+                return Ok(());
+            }
+        }
+
+        match value {
+            Value::Sequence(_) => {
+                writeln!(writer, ":")?;
+                let bump = self.effective_sequence_indent();
+                self.current_indent += bump;
+                self.emit_value(value, writer)?;
+                self.current_indent -= bump;
+            }
+            Value::Mapping(_) => {
+                writeln!(writer, ":")?;
+                self.current_indent += self.indent;
+                self.emit_value(value, writer)?;
+                self.current_indent -= self.indent;
+            }
+            _ => {
+                write!(writer, ": ")?;
+                self.emit_scalar(value, writer)?;
+            }
+        }
         Ok(())
     }
 
@@ -555,31 +659,7 @@ impl BasicEmitter {
                 self.emit_scalar(key, writer)?;
             }
 
-            match value {
-                Value::Sequence(seq) if seq.is_empty() => {
-                    write!(writer, ": []")?;
-                }
-                Value::Mapping(map) if map.is_empty() => {
-                    write!(writer, ": {{}}")?;
-                }
-                Value::Sequence(_) => {
-                    writeln!(writer, ":")?;
-                    let seq_indent = self.effective_sequence_indent();
-                    self.current_indent += seq_indent;
-                    self.emit_value(value, writer)?;
-                    self.current_indent -= seq_indent;
-                }
-                Value::Mapping(_) => {
-                    writeln!(writer, ":")?;
-                    self.current_indent += self.indent;
-                    self.emit_value(value, writer)?;
-                    self.current_indent -= self.indent;
-                }
-                _ => {
-                    write!(writer, ": ")?;
-                    self.emit_scalar(value, writer)?;
-                }
-            }
+            self.emit_pair_value(value, writer)?;
         }
 
         Ok(())
@@ -642,31 +722,7 @@ impl BasicEmitter {
                 self.emit_scalar(key, writer)?;
             }
 
-            match value {
-                Value::Sequence(seq) if seq.is_empty() => {
-                    write!(writer, ": []")?;
-                }
-                Value::Mapping(map) if map.is_empty() => {
-                    write!(writer, ": {{}}")?;
-                }
-                Value::Sequence(_) => {
-                    writeln!(writer, ":")?;
-                    let seq_indent = self.effective_sequence_indent();
-                    self.current_indent += seq_indent;
-                    self.emit_value(value, writer)?;
-                    self.current_indent -= seq_indent;
-                }
-                Value::Mapping(_) => {
-                    writeln!(writer, ":")?;
-                    self.current_indent += self.indent;
-                    self.emit_value(value, writer)?;
-                    self.current_indent -= self.indent;
-                }
-                _ => {
-                    write!(writer, ": ")?;
-                    self.emit_scalar(value, writer)?;
-                }
-            }
+            self.emit_pair_value(value, writer)?;
         }
 
         Ok(())
@@ -749,10 +805,13 @@ impl BasicEmitter {
         // Check if this value has an anchor/alias
         if let Some(info) = self.shared_values.get(value).cloned() {
             if info.first_occurrence {
-                // First occurrence: emit with anchor
+                // First occurrence: emit with anchor on its own line so the
+                // following block collection cannot accidentally land on the
+                // same line as the property (which the scanner rejects).
                 match value {
                     Value::Sequence(seq) => {
-                        write!(writer, "&{} ", info.anchor_name)?;
+                        writeln!(writer, "&{}", info.anchor_name)?;
+                        self.write_indent(writer)?;
                         self.emit_sequence(seq, writer)?;
                     }
                     Value::Mapping(map) => {

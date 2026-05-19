@@ -412,6 +412,51 @@ fn test_no_anchors_when_disabled() {
     );
 }
 
+/// Regression: emitter used to produce `&anchor - item` (anchor + block-entry on
+/// same line) for an anchored block sequence in mapping-value position, which
+/// the scanner correctly rejects. The fix places the anchor on the same line as
+/// the `:` separator with the sequence body on subsequent lines.
+#[test]
+fn test_round_trip_shared_sequence_value() {
+    let yaml = Yaml::new();
+
+    let shared = Value::Sequence(vec![
+        Value::String("logging".to_string()),
+        Value::String("metrics".to_string()),
+    ]);
+
+    let mut root = indexmap::IndexMap::new();
+    root.insert(Value::String("features_a".to_string()), shared.clone());
+    root.insert(Value::String("features_b".to_string()), shared);
+
+    let value = Value::Mapping(root);
+    let output = yaml.dump_str(&value).unwrap();
+
+    // The emitter must produce parseable YAML.
+    let reparsed = yaml
+        .load_str(&output)
+        .unwrap_or_else(|e| panic!("emitted YAML must reparse, got error {e:?}\n--- emitted ---\n{output}"));
+    assert_eq!(value, reparsed, "round-trip mismatch\nemitted:\n{output}");
+}
+
+/// Regression: emitter used to produce `- &anchor   - item` (anchor + block-entry
+/// on same line) for an anchored block sequence as a sequence item. The fix
+/// places the anchor inline with the `- ` separator and the body on next lines.
+#[test]
+fn test_round_trip_shared_sequence_as_sequence_item() {
+    let yaml = Yaml::new();
+
+    let shared = Value::Sequence(vec![Value::Int(1), Value::Int(2)]);
+
+    let outer = Value::Sequence(vec![shared.clone(), shared]);
+    let output = yaml.dump_str(&outer).unwrap();
+
+    let reparsed = yaml
+        .load_str(&output)
+        .unwrap_or_else(|e| panic!("emitted YAML must reparse, got error {e:?}\n--- emitted ---\n{output}"));
+    assert_eq!(outer, reparsed, "round-trip mismatch\nemitted:\n{output}");
+}
+
 #[test]
 fn test_no_anchors_without_shared_values() {
     let yaml = Yaml::new();

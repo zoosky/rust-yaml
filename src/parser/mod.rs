@@ -196,17 +196,17 @@ pub struct BasicParser {
     /// upcoming collection) from an "inline" anchor (same line as the
     /// next key — belongs to that key). yaml-test-suite 6BFJ, 9KAX.
     pending_anchor_line: Option<usize>,
-    /// Line of the most recent \`?\` Key marker. Used to detect when
+    /// Line of the most recent `?` Key marker. Used to detect when
     /// an explicit-key construct has an inline single-pair mapping as
     /// its key (yaml-test-suite M2N8/00, M2N8/01, V9D5).
     last_key_marker_line: Option<usize>,
-    /// Column of the most recent \`?\` Key marker. Used in V9D5: when
-    /// a \`:\` arrives at the same column as the most recent \`?\` on
+    /// Column of the most recent `?` Key marker. Used in V9D5: when
+    /// a `:` arrives at the same column as the most recent `?` on
     /// a later line, it's the explicit value separator — close any
     /// inline-wrapped inner mapping first.
     last_key_marker_column: Option<usize>,
     /// Set when an explicit value separator just closed an inline-
-    /// wrapped key. The next \`<scalar>:<scalar>\` on the same line
+    /// wrapped key. The next `<scalar>:<scalar>` on the same line
     /// should also be wrapped in an inner mapping (V9D5's value side).
     just_closed_inline_wrap: bool,
     /// Column of an open inline-wrap mapping (V9D5). Used to detect

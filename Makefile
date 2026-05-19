@@ -93,7 +93,7 @@ test-security: ## Run security-specific tests
 	@timeout 60s cargo test --test security_limits
 	@timeout 60s cargo test --test security_limits test_nested_alias_expansion_limit
 
-test-yaml-suite: ## Run upstream yaml-test-suite conformance harness
+yaml-test-suite: ## Run upstream yaml-test-suite conformance harness
 	@echo "🧪 Running yaml/yaml-test-suite conformance harness..."
 	@git submodule update --init --recursive yaml-test-suite/data
 	@timeout 300s cargo test -p yaml-test-suite -- --nocapture
@@ -144,9 +144,9 @@ deny: ## Run cargo deny checks
 	@timeout 15s cargo deny check
 
 # Documentation
-doc: ## Build documentation
+doc: ## Build documentation (treats rustdoc warnings as errors)
 	@echo "📚 Building documentation..."
-	@cargo doc --all-features --no-deps
+	@RUSTDOCFLAGS="-D warnings" cargo doc --all-features --no-deps
 
 doc-open: ## Build and open documentation
 	@echo "📚 Building and opening documentation..."
@@ -272,6 +272,8 @@ ci: ## Run CI pipeline locally (same as GitHub Actions)
 	@echo "🔄 Running CI pipeline locally..."
 	@make format-check
 	@make clippy-strict
+	@echo "🏗️  Pre-compiling test artifacts (warms dev-deps for subsequent steps)..."
+	@timeout 300s cargo test --no-run --tests --quiet
 	@make test-lib
 	@make test-integration
 	@make test-security
@@ -434,18 +436,40 @@ debug-env: ## Show development environment information
 	@echo "Commit template: $$(git config --get commit.template || echo 'none')"
 
 # Markdown and Documentation
-check-markdown: ## Check markdown formatting
+check-markdown: ## Check markdown formatting (strict — any warning fails the target)
 	@echo "📝 Checking markdown formatting..."
-	@for file in *.md; do \
+	@fail=0; \
+	for file in *.md; do \
 		if [ -f "$$file" ]; then \
 			echo "Checking $$file..."; \
-			echo "=== MD022 Issues in $$file ==="; \
-			awk 'NR > 1 && /^#{1,6} / && prev_line != "" {print "Line " NR ": Missing blank line before heading: " $$0} {prev_line = $$0}' "$$file" || true; \
-			echo "=== MD032 Issues in $$file ==="; \
-			awk 'NR > 1 && (/^[-*+] / || /^[0-9]+\. /) && prev_line != "" && prev_line !~ /^[-*+] / && prev_line !~ /^[0-9]+\. / {print "Line " NR ": Missing blank line before list: " $$0} {prev_line = $$0}' "$$file" || true; \
+			echo "=== MD022 (blank line before heading) ==="; \
+			awk 'BEGIN { in_fence = 0; prev = ""; issues = 0 } \
+				/^```/ { in_fence = !in_fence; prev = $$0; next } \
+				in_fence { prev = $$0; next } \
+				NR > 1 && /^#{1,6} / && prev != "" { \
+					print "  Line " NR ": " $$0; issues++ \
+				} \
+				{ prev = $$0 } \
+				END { exit (issues > 0 ? 1 : 0) }' "$$file" || fail=1; \
+			echo "=== MD032 (blank line before list) ==="; \
+			awk 'BEGIN { in_fence = 0; prev = ""; issues = 0 } \
+				/^```/ { in_fence = !in_fence; prev = $$0; next } \
+				in_fence { prev = $$0; next } \
+				NR > 1 && (/^[-*+] / || /^[0-9]+\. /) && prev != "" \
+					&& prev !~ /^[-*+] / && prev !~ /^[0-9]+\. / \
+					&& prev !~ /^[ \t]/ { \
+					print "  Line " NR ": " $$0; issues++ \
+				} \
+				{ prev = $$0 } \
+				END { exit (issues > 0 ? 1 : 0) }' "$$file" || fail=1; \
 			echo ""; \
 		fi; \
-	done
+	done; \
+	if [ $$fail -ne 0 ]; then \
+		echo "❌ Markdown checks failed — fix the listed lines or update the source files"; \
+		exit 1; \
+	fi; \
+	echo "✅ Markdown checks passed"
 
 fix-markdown: ## Fix common markdown formatting issues
 	@echo "📝 Fixing markdown issues (MD022: blanks around headings, MD031: blanks around fences, MD032: blanks around lists, bold-as-headings)..."

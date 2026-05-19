@@ -2591,7 +2591,7 @@ impl BasicScanner {
         Ok(identifier)
     }
 
-    /// Scan a tag token (!tag or !!tag or !<verbatim>)
+    /// Scan a tag token (`!tag`, `!!tag`, or `!<verbatim>`).
     fn scan_tag(&mut self) -> Result<Token> {
         let start_pos = self.position;
         self.advance(); // Skip first '!'

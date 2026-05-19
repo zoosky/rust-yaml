@@ -64,10 +64,8 @@ fn has_unclosed_flow_collection(events: &[Event]) -> bool {
             | EventType::MappingStart {
                 flow_style: true, ..
             } => depth += 1,
-            EventType::SequenceEnd | EventType::MappingEnd => {
-                if depth > 0 {
-                    depth -= 1;
-                }
+            EventType::SequenceEnd | EventType::MappingEnd if depth > 0 => {
+                depth -= 1;
             }
             _ => {}
         }
@@ -97,10 +95,8 @@ fn second_root_node_present(events: &[Event]) -> bool {
                     has_root_node = true;
                 }
             }
-            EventType::Scalar { .. } | EventType::Alias { .. } => {
-                if depth == 0 {
-                    has_root_node = true;
-                }
+            EventType::Scalar { .. } | EventType::Alias { .. } if depth == 0 => {
+                has_root_node = true;
             }
             _ => {}
         }

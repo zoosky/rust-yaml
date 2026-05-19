@@ -15,8 +15,8 @@ runs:
 
         set -euo pipefail
 
-        echo "GITHUB_BOT_EMAIL=${{ env.GITHUB_BOT_EMAIL }}" >> $GITHUB_ENV
-        echo "GITHUB_BOT_USERNAME=${{ env.GITHUB_BOT_USERNAME }}" >> $GITHUB_ENV
+        echo "GITHUB_BOT_EMAIL=${{ env.GITHUB_BOT_EMAIL }}" >> "$GITHUB_ENV"
+        echo "GITHUB_BOT_USERNAME=${{ env.GITHUB_BOT_USERNAME }}" >> "$GITHUB_ENV"
 
         git config --global author.email "${{ env.GITHUB_BOT_EMAIL }}"
         git config --global author.name "${{ env.GITHUB_BOT_USERNAME }}"
@@ -30,5 +30,5 @@ runs:
         git config --global user.email "${{ env.GITHUB_BOT_EMAIL }}"
         git config --global user.name "${{ env.GITHUB_BOT_USERNAME }}"
 
-        echo "bot_email=${{ env.GITHUB_BOT_EMAIL }}" >> $GITHUB_OUTPUT
-        echo "bot_user=${{ env.GITHUB_BOT_USERNAME }}" >> $GITHUB_OUTPUT
+        echo "bot_email=${{ env.GITHUB_BOT_EMAIL }}" >> "$GITHUB_OUTPUT"
+        echo "bot_user=${{ env.GITHUB_BOT_USERNAME }}" >> "$GITHUB_OUTPUT"

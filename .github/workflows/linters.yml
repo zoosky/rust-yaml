@@ -1,4 +1,8 @@
-name: Commit Lint
+name: Linter
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 on:
   pull_request:
@@ -7,13 +11,59 @@ on:
     branches: [main, develop]
 
 jobs:
+  pre-commit:
+    name: Pre-Commit
+    runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
+    steps:
+      - name: Generate GitHub App Token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.CLIENT_ID }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          private-key: ${{ secrets.PRIVATE_KEY }}
+
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          # Use PR head SHA on pull_request events to avoid synthetic merge commit
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: "0"
+          fetch-tags: true
+          token: ${{ steps.app-token.outputs.token || github.token }}
+          submodules: true
+
+      - name: GitHub Actions Bot Setup
+        uses: ./.github/actions/bot-setup
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ vars.PYTHON_VERSION || '3.13' }}
+
+      - name: Cache pre-commit hooks
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-py${{ vars.PYTHON_VERSION || '3.13' }}-${{ hashFiles('.pre-commit-config.yaml') }}
+          restore-keys: |
+            pre-commit-${{ runner.os }}-py${{ vars.PYTHON_VERSION || '3.13' }}-
+            pre-commit-${{ runner.os }}-
+
+      - name: Install pre-commit
+        run: python -m pip install --upgrade pip pre-commit
+
+      - name: Pre-Commit Check
+        run: pre-commit run --show-diff-on-failure --color=always --all-files
+
   committed:
     name: Commit Message Lint (committed)
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
     timeout-minutes: 5
     steps:
       - name: Generate GitHub App Token
-        id: github_app_auth
+        id: app-token
         uses: actions/create-github-app-token@v3
         with:
           client-id: ${{ vars.CLIENT_ID }}

@@ -3,7 +3,7 @@
 ## Problem
 
 - docs.rs failed to build rust-yaml versions 0.0.1 and 0.0.2
-- Documentation is not available at https://docs.rs/rust-yaml
+- Documentation is not available at <https://docs.rs/rust-yaml>
 
 ## Root Causes Identified
 
@@ -54,8 +54,8 @@
 
 4. **Monitor docs.rs build**
    - Wait 5-10 minutes for docs.rs to build
-   - Check: https://docs.rs/rust-yaml/0.0.3
-   - Build logs: https://docs.rs/crate/rust-yaml/0.0.3/builds
+   - Check: <https://docs.rs/rust-yaml/0.0.3>
+   - Build logs: <https://docs.rs/crate/rust-yaml/0.0.3/builds>
 
 ## Scripts Created
 

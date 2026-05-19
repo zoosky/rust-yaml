@@ -217,7 +217,4 @@ cargo fmt -- --check
 
 <!-- Any specific questions you have for reviewers -->
 
--
-- ***
-
-  **Thank you for contributing to rust-yaml! 🎉**
+**Thank you for contributing to rust-yaml! 🎉**

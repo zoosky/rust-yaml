@@ -1,5 +1,9 @@
 name: CI
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 on:
   push:
     branches: [main, develop]
@@ -27,7 +31,7 @@ env:
 jobs:
   version:
     name: Version Info
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
     timeout-minutes: 6
     outputs:
       informational_version: ${{ steps.gitversion.outputs.InformationalVersion }}
@@ -38,7 +42,7 @@ jobs:
       minor: ${{ steps.gitversion.outputs.Minor }}
     steps:
       - name: Generate GitHub App Token
-        id: github_app_auth
+        id: app-token
         uses: actions/create-github-app-token@v3
         with:
           client-id: ${{ vars.CLIENT_ID }}
@@ -49,7 +53,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
+          # Use PR head SHA on pull_request events to avoid synthetic merge commit
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: "0"
+          fetch-tags: true
+          token: ${{ steps.app-token.outputs.token || github.token }}
+          submodules: true
 
       - name: GitHub Actions Bot Setup
         uses: ./.github/actions/bot-setup
@@ -107,7 +116,7 @@ jobs:
             rust-target: aarch64-apple-darwin
     steps:
       - name: Generate GitHub App Token
-        id: github_app_auth
+        id: app-token
         uses: actions/create-github-app-token@v3
         with:
           client-id: ${{ vars.CLIENT_ID }}
@@ -118,7 +127,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
+          # Use PR head SHA on pull_request events to avoid synthetic merge commit
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: "0"
+          fetch-tags: true
+          token: ${{ steps.app-token.outputs.token || github.token }}
+          submodules: true
 
       - name: GitHub Actions Bot Setup
         uses: ./.github/actions/bot-setup
@@ -131,12 +145,12 @@ jobs:
 
       - name: Install cross-compilation tools (Linux ARM64)
         if: matrix.os == 'ubuntu-latest' && matrix.arch == 'aarch64'
-        run: |
+        run: |  # pragma: allowlist secret
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
-          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
-          echo "CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
-          echo "CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++" >> $GITHUB_ENV
+          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
+          echo "CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
+          echo "CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++" >> "$GITHUB_ENV"
 
       - name: Cache Rust toolchain
         uses: actions/cache@v5
@@ -198,14 +212,130 @@ jobs:
           cargo build --target ${{ matrix.rust-target }} --tests --all-features --verbose
           cargo build --target ${{ matrix.rust-target }} --tests --no-default-features --verbose
 
+  yaml_test_suite:
+    name: YAML Test Suite Conformance
+    runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
+    timeout-minutes: 15
+    if: ${{ !contains(github.event.head_commit.message, '[skip ci]') && !contains(github.event.head_commit.message, '[ci skip]') }}
+    steps:
+      - name: Generate GitHub App Token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.CLIENT_ID }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          private-key: ${{ secrets.PRIVATE_KEY }}
+
+      - name: Checkout repository (with submodules)
+        uses: actions/checkout@v6
+        with:
+          # Use PR head SHA on pull_request events to avoid synthetic merge commit
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: "0"
+          fetch-tags: true
+          # `yaml-test-suite/data` is a submodule pointing at yaml/yaml-test-suite.
+          # Without `recursive`, the harness short-circuits with "Skipping" and we'd
+          # publish a green-but-empty report on every run.
+          submodules: recursive
+          token: ${{ steps.app-token.outputs.token || github.token }}
+
+      - name: GitHub Actions Bot Setup
+        uses: ./.github/actions/bot-setup
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Rust cache
+        uses: ./.github/actions/setup-rust-cache
+        with:
+          cache-key-suffix: yaml-test-suite
+
+      - name: Run yaml-test-suite conformance harness
+        id: conformance
+        run: |
+          set -o pipefail
+          mkdir -p target
+          # Mirror `make test-yaml-suite` verbatim. The harness only asserts
+          # pass_rate >= 10%, so a non-zero exit is a meaningful regression
+          # signal — but we keep going so the report still gets published.
+          if timeout 300s cargo test -p yaml-test-suite -- --nocapture 2>&1 \
+              | tee target/yaml-test-suite.log; then
+            echo "status=pass" >> "$GITHUB_OUTPUT"
+            echo "exit_code=0" >> "$GITHUB_OUTPUT"
+          else
+            ec=$?
+            echo "status=fail" >> "$GITHUB_OUTPUT"
+            echo "exit_code=$ec" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Generate Step Summary report
+        if: always()
+        env:
+          CONFORMANCE_STATUS: ${{ steps.conformance.outputs.status }}
+          CONFORMANCE_EXIT_CODE: ${{ steps.conformance.outputs.exit_code }}
+        run: |
+          log=target/yaml-test-suite.log
+          {
+            echo "# YAML Test Suite Conformance Report"
+            echo
+            if [ ! -s "$log" ]; then
+              echo "> :warning: harness produced no output — see job logs."
+              exit 0
+            fi
+            echo "## Totals"
+            echo
+            echo '```text'
+            # The harness prints a box-drawing summary block; pull it
+            # verbatim so the table renders inside the fence.
+            sed -n '/╔══*╗/,/╚══*╝/p' "$log"
+            echo '```'
+            echo
+            if grep -q 'Failure breakdown:' "$log"; then
+              echo "## Failure breakdown"
+              echo
+              echo '```text'
+              grep -A 4 'Failure breakdown:' "$log"
+              echo '```'
+              echo
+            fi
+            echo "## Artifacts"
+            echo
+            echo "- Full run log: \`yaml-test-suite.log\`"
+            echo "- Per-test failure detail: \`yaml-test-suite-failures.txt\`"
+            echo
+            if [ "$CONFORMANCE_STATUS" != "pass" ]; then
+              echo "> :rotating_light: harness exited non-zero (status=$CONFORMANCE_STATUS, code=$CONFORMANCE_EXIT_CODE)."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload conformance artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: yaml-test-suite-report-${{ github.run_id }}
+          path: |
+            target/yaml-test-suite.log
+            target/yaml-test-suite-failures.txt
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Propagate harness exit code
+        if: steps.conformance.outputs.status != 'pass'
+        env:
+          CONFORMANCE_EXIT_CODE: ${{ steps.conformance.outputs.exit_code }}
+        run: |
+          echo "::error title=yaml-test-suite regression::harness exited with code ${CONFORMANCE_EXIT_CODE} (pass rate below threshold or panic). See the Step Summary and uploaded artifacts."
+          exit 1
+
   rustfmt:
     name: Format
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
     timeout-minutes: 6
     if: ${{ !contains(github.event.head_commit.message, '[skip ci]') && !contains(github.event.head_commit.message, '[ci skip]') }}
     steps:
       - name: Generate GitHub App Token
-        id: github_app_auth
+        id: app-token
         uses: actions/create-github-app-token@v3
         with:
           client-id: ${{ vars.CLIENT_ID }}
@@ -216,7 +346,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
+          # Use PR head SHA on pull_request events to avoid synthetic merge commit
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: "0"
+          fetch-tags: true
+          token: ${{ steps.app-token.outputs.token || github.token }}
+          submodules: true
 
       - name: GitHub Actions Bot Setup
         uses: ./.github/actions/bot-setup
@@ -231,12 +366,12 @@ jobs:
 
   clippy:
     name: Clippy
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
     timeout-minutes: 6
     if: ${{ !contains(github.event.head_commit.message, '[skip ci]') && !contains(github.event.head_commit.message, '[ci skip]') }}
     steps:
       - name: Generate GitHub App Token
-        id: github_app_auth
+        id: app-token
         uses: actions/create-github-app-token@v3
         with:
           client-id: ${{ vars.CLIENT_ID }}
@@ -247,7 +382,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
+          # Use PR head SHA on pull_request events to avoid synthetic merge commit
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: "0"
+          fetch-tags: true
+          token: ${{ steps.app-token.outputs.token || github.token }}
+          submodules: true
 
       - name: GitHub Actions Bot Setup
         uses: ./.github/actions/bot-setup
@@ -284,12 +424,17 @@ jobs:
 
   coverage:
     name: Coverage
-    runs-on: ubuntu-latest
-    timeout-minutes: 6
+    runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
+    # tarpaulin instruments + recompiles every crate from scratch
+    # (cold dep cache, `--cfg=tarpaulin`), then runs lib + tests.
+    # On the public Linux runner that's ~4–5 min compile + ~2 min
+    # tests, so 6 min was right at the cliff and consistently
+    # tripped the kill timeout. 20 min gives comfortable slack.
+    timeout-minutes: 20
     if: ${{ !contains(github.event.head_commit.message, '[skip ci]') && !contains(github.event.head_commit.message, '[ci skip]') }}
     steps:
       - name: Generate GitHub App Token
-        id: github_app_auth
+        id: app-token
         uses: actions/create-github-app-token@v3
         with:
           client-id: ${{ vars.CLIENT_ID }}
@@ -300,7 +445,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
+          # Use PR head SHA on pull_request events to avoid synthetic merge commit
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: "0"
+          fetch-tags: true
+          token: ${{ steps.app-token.outputs.token || github.token }}
+          submodules: true
 
       - name: GitHub Actions Bot Setup
         uses: ./.github/actions/bot-setup
@@ -336,9 +486,100 @@ jobs:
             ${{ runner.os }}-cargo-build-stable-
 
       - name: Generate coverage report
+        # Switched from `cargo tarpaulin` to `cargo llvm-cov`:
+        # tarpaulin's default ptrace engine intermittently failed under
+        # the CI runner with `Test failed during run` AFTER every test
+        # binary individually reported "ok" — a known ptrace-vs-multi-
+        # thread interaction on the public Linux runner. cargo-llvm-cov
+        # uses LLVM source-based coverage instrumentation instead, which
+        # is process-isolated and doesn't depend on ptrace. It's already
+        # installed by `./.github/actions/setup-cargo-tools` and the
+        # locally-verified equivalent command produces the same lcov.
+        #
+        # We emit BOTH formats from a single test run:
+        #   * `lcov.info`     — for Codecov upload (downstream step)
+        #   * `cobertura.xml` — for `irongut/CodeCoverageSummary`,
+        #                       which renders a PR comment + workflow
+        #                       badge in a GitHub-native format
+        # `cargo llvm-cov report` re-uses the profraw produced by the
+        # first invocation, so tests aren't executed twice.
         run: |
-          cargo tarpaulin --lib --tests --out lcov --output-dir . --verbose --workspace --timeout 120 --exclude-files examples/* benches/*
-          ls -la lcov.info
+          cargo llvm-cov --workspace --tests --lcov --output-path lcov.info \
+            --ignore-filename-regex '^(examples|benches)/'
+          cargo llvm-cov report --cobertura --output-path cobertura.xml \
+            --ignore-filename-regex '^(examples|benches)/'
+          ls -la lcov.info cobertura.xml
+
+      - name: Append coverage summary to job summary
+        # `cargo llvm-cov report --summary-only` reads the profraw files
+        # produced by the previous step (cargo-llvm-cov keeps them in
+        # `target/llvm-cov-target/profraw/` by default) and emits a
+        # per-file table. We surface the TOTAL line at a glance and put
+        # the full per-file breakdown one click away in a `<details>`
+        # block so the job summary stays scannable.
+        if: always()
+        run: |
+          report=$(cargo llvm-cov report --summary-only \
+            --ignore-filename-regex '^(examples|benches)/' 2>&1) || true
+          total=$(printf '%s\n' "$report" | awk '/^TOTAL/{print}')
+
+          # Extract the three "Cover" columns from the TOTAL row:
+          # Filename | Regions | Missed | Cover | Functions | Missed | Cover | Lines | Missed | Cover | …
+          regions_pct=$(printf '%s\n' "$total" | awk '{print $4}')
+          functions_pct=$(printf '%s\n' "$total" | awk '{print $7}')
+          lines_pct=$(printf '%s\n' "$total" | awk '{print $10}')
+
+          {
+            echo "## 📊 Coverage Report"
+            echo ""
+            echo "| Metric | Coverage |"
+            echo "| --- | --- |"
+            echo "| Lines | **${lines_pct:-N/A}** |"
+            echo "| Functions | ${functions_pct:-N/A} |"
+            echo "| Regions | ${regions_pct:-N/A} |"
+            echo ""
+            echo "Generated with [\`cargo-llvm-cov\`](https://github.com/taiki-e/cargo-llvm-cov);"
+            echo "full \`lcov.info\` uploaded to [Codecov](https://app.codecov.io/gh/${GITHUB_REPOSITORY}) below."
+            echo ""
+            echo "<details><summary><strong>Per-file breakdown</strong></summary>"
+            echo ""
+            echo '```text'
+            printf '%s\n' "$report"
+            echo '```'
+            echo ""
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Code Coverage Summary Report
+        # Converts the cobertura XML into a GitHub-native markdown
+        # report. Posts/updates a sticky PR comment via the action's
+        # built-in commenting and writes `code-coverage-results.md`
+        # which we also fold into the workflow step summary.
+        uses: irongut/CodeCoverageSummary@v1.3.0
+        if: always() && hashFiles('cobertura.xml') != ''
+        with:
+          filename: cobertura.xml
+          badge: true
+          format: markdown
+          output: both
+          # Thresholds drive the color of the badge / summary header:
+          #   <  60% → 🔴
+          #   60–80% → 🟡
+          #   >  80% → 🟢
+          thresholds: "60 80"
+
+      - name: Sticky PR comment with coverage delta
+        # Re-uses the markdown that CodeCoverageSummary just wrote to
+        # `code-coverage-results.md` and posts it as a single replaced
+        # PR comment instead of accumulating new ones per push.
+        # `@v3` is on Node.js 24 (the deprecated `@v2` still uses
+        # Node.js 20, which the runner started flagging in late 2025).
+        uses: marocchino/sticky-pull-request-comment@v3
+        if: github.event_name == 'pull_request' && hashFiles('code-coverage-results.md') != ''
+        with:
+          recreate: true
+          path: code-coverage-results.md
+          header: coverage-report
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v6
@@ -353,12 +594,12 @@ jobs:
 
   security_audit:
     name: Security Audit
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
     timeout-minutes: 6
     if: ${{ !contains(github.event.head_commit.message, '[skip ci]') && !contains(github.event.head_commit.message, '[ci skip]') }}
     steps:
       - name: Generate GitHub App Token
-        id: github_app_auth
+        id: app-token
         uses: actions/create-github-app-token@v3
         with:
           client-id: ${{ vars.CLIENT_ID }}
@@ -369,7 +610,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
+          # Use PR head SHA on pull_request events to avoid synthetic merge commit
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: "0"
+          fetch-tags: true
+          token: ${{ steps.app-token.outputs.token || github.token }}
+          submodules: true
 
       - name: GitHub Actions Bot Setup
         uses: ./.github/actions/bot-setup
@@ -390,12 +636,12 @@ jobs:
 
   dependency_check:
     name: Dependency Check
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
     timeout-minutes: 20
     if: ${{ !contains(github.event.head_commit.message, '[skip ci]') && !contains(github.event.head_commit.message, '[ci skip]') }}
     steps:
       - name: Generate GitHub App Token
-        id: github_app_auth
+        id: app-token
         uses: actions/create-github-app-token@v3
         with:
           client-id: ${{ vars.CLIENT_ID }}
@@ -406,7 +652,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
+          # Use PR head SHA on pull_request events to avoid synthetic merge commit
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: "0"
+          fetch-tags: true
+          token: ${{ steps.app-token.outputs.token || github.token }}
+          submodules: true
 
       - name: GitHub Actions Bot Setup
         uses: ./.github/actions/bot-setup
@@ -427,12 +678,12 @@ jobs:
 
   benchmark:
     name: Benchmark
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
     timeout-minutes: 15
     if: ${{ !contains(github.event.head_commit.message, '[skip ci]') && !contains(github.event.head_commit.message, '[ci skip]') }}
     steps:
       - name: Generate GitHub App Token
-        id: github_app_auth
+        id: app-token
         uses: actions/create-github-app-token@v3
         with:
           client-id: ${{ vars.CLIENT_ID }}
@@ -443,7 +694,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
+          # Use PR head SHA on pull_request events to avoid synthetic merge commit
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: "0"
+          fetch-tags: true
+          token: ${{ steps.app-token.outputs.token || github.token }}
+          submodules: true
 
       - name: GitHub Actions Bot Setup
         uses: ./.github/actions/bot-setup
@@ -478,11 +734,11 @@ jobs:
 
   docs:
     name: Documentation
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
     timeout-minutes: 6
     steps:
       - name: Generate GitHub App Token
-        id: github_app_auth
+        id: app-token
         uses: actions/create-github-app-token@v3
         with:
           client-id: ${{ vars.CLIENT_ID }}
@@ -493,7 +749,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
+          # Use PR head SHA on pull_request events to avoid synthetic merge commit
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: "0"
+          fetch-tags: true
+          token: ${{ steps.app-token.outputs.token || github.token }}
+          submodules: true
 
       - name: GitHub Actions Bot Setup
         uses: ./.github/actions/bot-setup
@@ -541,10 +802,11 @@ jobs:
         clippy,
         rustfmt,
         test,
+        yaml_test_suite,
         version,
       ]
     name: Build
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
     timeout-minutes: 20
     env:
       BUILD_OS: ubuntu-latest
@@ -556,7 +818,7 @@ jobs:
       cancel-in-progress: false
     steps:
       - name: Generate GitHub App Token
-        id: github_app_auth
+        id: app-token
         uses: actions/create-github-app-token@v3
         with:
           client-id: ${{ vars.CLIENT_ID }}
@@ -567,7 +829,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
+          # Use PR head SHA on pull_request events to avoid synthetic merge commit
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: "0"
+          fetch-tags: true
+          token: ${{ steps.app-token.outputs.token || github.token }}
+          submodules: true
 
       - name: GitHub Actions Bot Setup
         uses: ./.github/actions/bot-setup
@@ -615,7 +882,7 @@ jobs:
         id: tag
         shell: bash -l {0}
         env:
-          GH_TOKEN: ${{ steps.github_app_auth.outputs.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           #!/usr/bin/env bash
 
@@ -659,7 +926,7 @@ jobs:
         id: release
         shell: bash -l {0}
         env:
-          GH_TOKEN: ${{ steps.github_app_auth.outputs.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           #!/usr/bin/env bash
 

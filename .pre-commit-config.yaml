@@ -282,7 +282,7 @@ minimum_pre_commit_version: "3.0.0"
 
 # Default language version (if needed)
 default_language_version:
-  python: python3.9
+  python: python3
 
 # Default stages for all hooks (customize per hook as needed)
 default_stages: [pre-commit]

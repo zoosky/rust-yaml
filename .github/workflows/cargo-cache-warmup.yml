@@ -1,5 +1,9 @@
 name: Cargo Cache Warmup
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref_name }}
+  cancel-in-progress: false
+
 on:
   schedule:
     # Run daily at midnight UTC
@@ -45,7 +49,7 @@ jobs:
             rust-target: aarch64-apple-darwin
     steps:
       - name: Generate GitHub App Token
-        id: github_app_auth
+        id: app-token
         uses: actions/create-github-app-token@v3
         with:
           client-id: ${{ vars.CLIENT_ID }}
@@ -56,7 +60,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
+          # Use PR head SHA on pull_request events to avoid synthetic merge commit
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: "0"
+          fetch-tags: true
+          token: ${{ steps.app-token.outputs.token || github.token }}
+          submodules: true
 
       - name: GitHub Actions Bot Setup
         uses: ./.github/actions/bot-setup
@@ -69,12 +78,17 @@ jobs:
 
       - name: Install cross-compilation tools (Linux ARM64)
         if: matrix.os == 'ubuntu-latest' && matrix.arch == 'aarch64'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
-          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
-          echo "CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
-          echo "CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++" >> $GITHUB_ENV
+        uses: awalsh128/cache-apt-pkgs-action@v1
+        with:
+          packages: gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+          version: 1.0
+
+      - name: Configure ARM64 cross-compile env
+        if: matrix.os == 'ubuntu-latest' && matrix.arch == 'aarch64'
+        run: |  # pragma: allowlist secret
+          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
+          echo "CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
+          echo "CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++" >> "$GITHUB_ENV"
 
       - name: Cache cargo registry
         uses: actions/cache@v5

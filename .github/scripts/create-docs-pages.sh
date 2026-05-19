@@ -43,20 +43,20 @@ cat > target/doc/landing.html << 'EOF'
 <body>
   <h1>rust-yaml</h1>
   <p>A fast, safe YAML 1.2 library for Rust with full specification support.</p>
-  
+
   <div class="badges">
     <img src="https://img.shields.io/crates/v/rust-yaml.svg" alt="Crates.io">
     <img src="https://img.shields.io/docsrs/rust-yaml" alt="docs.rs">
     <img src="https://img.shields.io/crates/l/rust-yaml.svg" alt="License">
   </div>
-  
+
   <div class="links">
     <a href="rust_yaml/index.html">📚 API Documentation</a>
     <a href="https://github.com/elioetibr/rust-yaml">📦 GitHub Repository</a>
     <a href="https://crates.io/crates/rust-yaml">🦀 Crates.io</a>
     <a href="https://docs.rs/rust-yaml">📖 docs.rs</a>
   </div>
-  
+
   <h2>Features</h2>
   <ul>
     <li>Full YAML 1.2 specification support</li>
@@ -66,7 +66,7 @@ cat > target/doc/landing.html << 'EOF'
     <li>Preserve formatting for round-trip operations</li>
     <li>Comprehensive error reporting with positions</li>
   </ul>
-  
+
   <h2>Quick Start</h2>
   <pre><code>use rust_yaml::{Yaml, Value};
 

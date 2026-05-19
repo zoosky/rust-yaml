@@ -9,7 +9,7 @@ This document describes how to publish new versions of rust-yaml to crates.io an
 Before publishing, ensure the following secrets are configured in your GitHub repository:
 
 1. **`CARGO_REGISTRY_TOKEN`** - Your crates.io API token
-   - Get it from: https://crates.io/me (click "API Tokens")
+   - Get it from: <https://crates.io/me> (click "API Tokens")
    - Add to GitHub: Settings → Secrets and variables → Actions → New repository secret
    - Name: `CARGO_REGISTRY_TOKEN`
    - Value: Your crates.io API token
@@ -96,8 +96,8 @@ gh release create v0.1.0 --generate-notes
 
 1. Check GitHub Actions for the workflow status
 2. Once complete, verify:
-   - crates.io: https://crates.io/crates/rust-yaml
-   - docs.rs: https://docs.rs/rust-yaml
+   - crates.io: <https://crates.io/crates/rust-yaml>
+   - docs.rs: <https://docs.rs/rust-yaml>
    - GitHub Pages: https://[your-username].github.io/rust-yaml/
 
 ## Documentation
@@ -133,7 +133,7 @@ Documentation is also published to GitHub Pages:
 
 ### Semantic Versioning
 
-Follow semantic versioning (https://semver.org/):
+Follow semantic versioning (<https://semver.org/>):
 
 - **MAJOR** (1.0.0): Breaking API changes
 - **MINOR** (0.1.0): New features, backward compatible
@@ -157,7 +157,7 @@ For pre-releases, use:
 
 **Solution**:
 
-1. Generate a new token at https://crates.io/me
+1. Generate a new token at <https://crates.io/me>
 2. Update the secret in GitHub repository settings
 
 ### Issue: "Package verification failed"
@@ -173,7 +173,7 @@ cargo publish --dry-run
 
 **Solution**:
 
-1. Check build status at: https://docs.rs/crate/rust-yaml/builds
+1. Check build status at: <https://docs.rs/crate/rust-yaml/builds>
 2. Ensure your `Cargo.toml` has valid metadata
 3. Check for build errors in the docs.rs build log
 

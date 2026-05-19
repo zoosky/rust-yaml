@@ -10,6 +10,10 @@ name: Publish to crates.io
 # Note: The CI workflow (ci.yml) handles testing and validation.
 # This workflow focuses solely on the publishing process.
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref_name }}
+  cancel-in-progress: false
+
 on:
   release:
     types: [published]
@@ -37,46 +41,13 @@ permissions:
 jobs:
   validate:
     name: Validate Release
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
     outputs:
       should_publish: ${{ steps.check.outputs.should_publish }}
       version: ${{ steps.version.outputs.version }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-
-      - name: Extract version
-        id: version
-        run: |
-          if [ "${{ github.event_name }}" = "release" ]; then
-            VERSION="${{ github.event.release.tag_name }}"
-            VERSION="${VERSION#v}"  # Remove 'v' prefix if present
-          else
-            VERSION="${{ github.event.inputs.version }}"
-          fi
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
-          echo "📦 Version to publish: ${VERSION}"
-
-      - name: Check if should publish
-        id: check
-        run: |
-          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
-            echo "should_publish=false" >> $GITHUB_OUTPUT
-            echo "🔍 Dry run mode - will not publish"
-          else
-            echo "should_publish=true" >> $GITHUB_OUTPUT
-            echo "✅ Will proceed with publishing"
-          fi
-
-  publish-crate:
-    name: Publish to crates.io
-    needs: [validate]
-    if: needs.validate.outputs.should_publish == 'true'
-    runs-on: ubuntu-latest
-    environment: crates-io
-    steps:
       - name: Generate GitHub App Token
-        id: github_app_auth
+        id: app-token
         uses: actions/create-github-app-token@v3
         with:
           client-id: ${{ vars.CLIENT_ID }}
@@ -87,7 +58,61 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
+          # Use PR head SHA on pull_request events to avoid synthetic merge commit
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: "0"
+          fetch-tags: true
+          token: ${{ steps.app-token.outputs.token || github.token }}
+          submodules: true
+
+      - name: Extract version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            VERSION="${{ github.event.release.tag_name }}"
+            VERSION="${VERSION#v}"  # Remove 'v' prefix if present
+          else
+            VERSION="${{ github.event.inputs.version }}"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "📦 Version to publish: ${VERSION}"
+
+      - name: Check if should publish
+        id: check
+        run: |
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+            echo "🔍 Dry run mode - will not publish"
+          else
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+            echo "✅ Will proceed with publishing"
+          fi
+
+  publish-crate:
+    name: Publish to crates.io
+    needs: [validate]
+    if: needs.validate.outputs.should_publish == 'true'
+    runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
+    environment: crates-io
+    steps:
+      - name: Generate GitHub App Token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.CLIENT_ID }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          private-key: ${{ secrets.PRIVATE_KEY }}
+
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          # Use PR head SHA on pull_request events to avoid synthetic merge commit
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: "0"
+          fetch-tags: true
+          token: ${{ steps.app-token.outputs.token || github.token }}
+          submodules: true
 
       - name: GitHub Actions Bot Setup
         uses: ./.github/actions/bot-setup
@@ -96,7 +121,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Crates.io Authentication
-        id: auth
+        id: crates-auth
         if: github.event.inputs.dry_run != 'true'
         uses: rust-lang/crates-io-auth-action@v1.0.4
 
@@ -112,11 +137,11 @@ jobs:
 
       - name: Check crates.io status
         if: github.event.inputs.dry_run != 'true'
-        id: check_crates
+        id: check-crates
+        env:
+          CRATE_NAME: ${{ vars.CRATE_NAME || github.event.repository.name }}
+          VERSION: ${{ needs.validate.outputs.version }}
         run: |
-          CRATE_NAME="rust-yaml"
-          VERSION="${{ needs.validate.outputs.version }}"
-
           # Check if version already exists
           if cargo search "${CRATE_NAME}" --limit 1 | grep -q "^${CRATE_NAME}.*\"${VERSION}\""; then
             echo "❌ Version ${VERSION} already exists on crates.io"
@@ -128,7 +153,7 @@ jobs:
       - name: Publish to crates.io
         if: github.event.inputs.dry_run != 'true'
         env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+          CARGO_REGISTRY_TOKEN: ${{ steps.crates-auth.outputs.token }}
         run: |
           cargo publish --token "${CARGO_REGISTRY_TOKEN}" --verbose
           echo "🎉 Successfully published version ${{ needs.validate.outputs.version }} to crates.io"
@@ -154,15 +179,16 @@ jobs:
     needs: [validate, publish-crate]
     if: |
       success() &&
+      needs.publish-crate.result == 'success' &&
       needs.validate.outputs.should_publish == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
     permissions:
       contents: write
       pages: write
       id-token: write
     steps:
       - name: Generate GitHub App Token
-        id: github_app_auth
+        id: app-token
         uses: actions/create-github-app-token@v3
         with:
           client-id: ${{ vars.CLIENT_ID }}
@@ -173,7 +199,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
+          # Use PR head SHA on pull_request events to avoid synthetic merge commit
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: "0"
+          fetch-tags: true
+          token: ${{ steps.app-token.outputs.token || github.token }}
+          submodules: true
 
       - name: GitHub Actions Bot Setup
         uses: ./.github/actions/bot-setup
@@ -207,7 +238,7 @@ jobs:
         if: github.event.inputs.dry_run != 'true'
         uses: actions/deploy-pages@v5
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ steps.app-token.outputs.token || github.token }}
 
       - name: Documentation URLs
         run: |
@@ -220,7 +251,7 @@ jobs:
     name: Publication Summary
     needs: [validate, publish-crate, publish-docs]
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
     steps:
       - name: Summary
         run: |

@@ -18,18 +18,18 @@ runs:
       shell: bash
       run: |
         if [ -n "${{ inputs.arch }}" ]; then
-          echo "arch=${{ inputs.arch }}" >> $GITHUB_OUTPUT
+          echo "arch=${{ inputs.arch }}" >> "$GITHUB_OUTPUT"
         else
           ARCH=$(uname -m)
           case $ARCH in
-            x86_64) echo "arch=x86_64" >> $GITHUB_OUTPUT ;;
-            aarch64|arm64) echo "arch=aarch64" >> $GITHUB_OUTPUT ;;
-            *) echo "arch=$ARCH" >> $GITHUB_OUTPUT ;;
+            x86_64) echo "arch=x86_64" >> "$GITHUB_OUTPUT" ;;
+            aarch64|arm64) echo "arch=aarch64" >> "$GITHUB_OUTPUT" ;;
+            *) echo "arch=$ARCH" >> "$GITHUB_OUTPUT" ;;
           esac
         fi
         # Replace spaces with dashes for cache key
         TOOLS_KEY=$(echo "${{ inputs.tools }}" | tr ' ' '-')
-        echo "tools-key=$TOOLS_KEY" >> $GITHUB_OUTPUT
+        echo "tools-key=$TOOLS_KEY" >> "$GITHUB_OUTPUT"
 
     - name: Cache cargo tools
       id: cache-cargo-tools

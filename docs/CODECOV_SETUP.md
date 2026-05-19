@@ -48,7 +48,7 @@ To manually trigger:
 1. Push a commit to any branch
 2. The CI workflow will automatically run
 3. Check the "Coverage Report" job in GitHub Actions
-4. View results at: https://app.codecov.io/gh/elioetibr/rust-yaml
+4. View results at: <https://app.codecov.io/gh/elioetibr/rust-yaml>
 
 ## Local Testing
 

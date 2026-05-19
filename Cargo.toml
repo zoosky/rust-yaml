@@ -90,6 +90,12 @@ crate-type = ["lib"]
 name = "rust_yaml"
 path = "src/lib.rs"
 required-features = []
+# `cargo bench` would otherwise run libtest's built-in harness on the
+# lib's unit tests, which doesn't accept Criterion's `--output-format
+# bencher` flag and aborts the whole `cargo bench` invocation before
+# any `[[bench]]` target runs. We only want the Criterion bench targets
+# in the bench profile; unit tests still run under `cargo test`.
+bench = false
 
 [[example]]
 name = "library_comparison"

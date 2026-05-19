@@ -7,8 +7,8 @@ on:
     branches: [main]
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   CARGO_TERM_COLOR: always
@@ -24,11 +24,16 @@ permissions:
 jobs:
   benchmark:
     name: Run Benchmarks
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+    runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
+    # Criterion CLI flags (--sample-size / --measurement-time /
+    # --warm-up-time below) cut bench wall time ~3-4x vs defaults
+    # while keeping enough samples for the 200% alert-threshold to
+    # detect real regressions. 30 min is a comfortable ceiling for
+    # the resulting ~8-12 min runtime + cold compile (~3 min).
+    timeout-minutes: 30
     steps:
       - name: Generate GitHub App Token
-        id: github_app_auth
+        id: app-token
         uses: actions/create-github-app-token@v3
         with:
           client-id: ${{ vars.CLIENT_ID }}
@@ -39,7 +44,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
+          # Use PR head SHA on pull_request events to avoid synthetic merge commit
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: "0"
+          fetch-tags: true
+          token: ${{ steps.app-token.outputs.token || github.token }}
+          submodules: true
 
       - name: GitHub Actions Bot Setup
         uses: ./.github/actions/bot-setup
@@ -69,16 +79,54 @@ jobs:
             ${{ runner.os }}-cargo-bench-${{ hashFiles('**/Cargo.lock') }}-
             ${{ runner.os }}-cargo-bench-
 
+      - name: Cache Criterion baselines
+        # The `target` cache above already saves `target/criterion/`,
+        # but its key is bound to source hashes — every source change
+        # invalidates it, so Criterion always sees a "first run". This
+        # second cache is keyed only by branch, so Criterion's per-bench
+        # `base/` directories survive across source iterations and emit
+        # `Change: [+/-x%]` lines next to each `bench:` line in the log.
+        # Restored after the broader `target` cache so it overlays the
+        # longer-lived baselines on top.
+        uses: actions/cache@v5
+        with:
+          path: target/criterion
+          key: criterion-${{ runner.os }}-${{ github.ref_name }}
+          restore-keys: |
+            criterion-${{ runner.os }}-
+
       - name: Run benchmarks
-        run: cargo bench
+        # The benches use `harness = false` (Criterion). Criterion's
+        # default output is its own format (`Benchmarking foo:`, `time:
+        # [n µs ...]`) which `benchmark-action/github-action-benchmark`
+        # with `tool: cargo` cannot parse — it expects the libtest format
+        # (`test foo ... bench: 1234 ns/iter (+/- 56)`). Pass
+        # `--output-format bencher` to Criterion to emit that format.
+        #
+        # The CI-tuned sampling cuts wall time ~3-4x vs Criterion
+        # defaults (100 samples × 5s = ~500s/bench) while keeping the
+        # statistical signal needed for the 200% alert-threshold:
+        #   --sample-size 30        (vs 100 default)
+        #   --measurement-time 2    (vs 5s default)
+        #   --warm-up-time 1        (vs 3s default)
+        run: |
+          cargo bench -- --output-format bencher \
+            --sample-size 30 \
+            --measurement-time 2 \
+            --warm-up-time 1 \
+            | tee bench-output.txt
 
       - name: Store benchmark result
         uses: benchmark-action/github-action-benchmark@v1.22.1
         with:
           tool: "cargo"
-          output-file-path: target/criterion/report/index.html
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          output-file-path: bench-output.txt
+          github-token: ${{ steps.app-token.outputs.token || github.token }}
           auto-push: true
+          # Always write a benchmark table to GitHub's Step Summary so
+          # results are visible from the Actions run page without
+          # opening the gh-pages dashboard. Zero perf impact.
+          summary-always: true
           # Show alert with commit comment on detecting possible performance regression
           alert-threshold: "200%"
           comment-on-alert: true

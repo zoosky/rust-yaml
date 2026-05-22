@@ -4,7 +4,7 @@
 
 This roadmap outlines the planned improvements and enhancements for rust-yaml, focusing on YAML 1.2 specification compliance, performance, security, and code quality.
 
-## Current Status (2026-05-18)
+## Current Status (2026-05-22)
 
 > 🎯 **100% upstream yaml-test-suite conformance achieved** —
 > 735 / 735 spec-conformance tests pass against the
@@ -40,7 +40,7 @@ This roadmap outlines the planned improvements and enhancements for rust-yaml, f
 
 **Development Infrastructure**
 
-- 190+ lib unit tests passing
+- 210+ lib unit tests passing (223 with `--all-features`)
 - 200+ integration tests passing
 - **735 / 735 yaml-test-suite conformance tests passing (100.0%)**
 - Comprehensive security test suite
@@ -78,6 +78,50 @@ This roadmap outlines the planned improvements and enhancements for rust-yaml, f
 - Full Unicode normalization
 - Comment preservation during editing (round-trip already done; in-place edits still open)
 - Language server protocol support
+
+## v1.1.0 Milestone — In Progress
+
+Granular delivery is tracked in the GitHub
+[v1.1.0 milestone](https://github.com/elioetibr/rust-yaml/milestone/2).
+Status as of 2026-05-22 — **6 of 16 issues implemented**.
+
+### ✅ Implemented — PR #67 (open, awaiting merge)
+
+| Issue | Change |
+|-------|--------|
+| #20 | `fix(scanner)` — `peek_char` `isize::MIN` offset overflow |
+| #24 | `fix(scanner)` — cap anchor/alias name length while scanning |
+| #25 | `fix(streaming)` — `MmapYamlReader` UTF-8 errors + char-boundary splits |
+| #26 | `perf(scanner)` — drop the `char_indices` side table + O(n) directive resets |
+| #27 | `perf(error)` — build error context from a line window, not all lines |
+| #28 | `test(fuzz)` — cargo-fuzz harness (`load_str`, `load_str_strict`, `roundtrip`) |
+
+### 🚧 Remaining — P1
+
+| Issue | Change | Effort | Blocked by |
+|-------|--------|--------|------------|
+| #66 | `fix(parser)` — numeric mapping key parsed as a bare scalar | Medium | — |
+| #22 | `fix(resolver)` — implicit hex/octal/binary integers + float forms | Medium | #34 |
+| #21 | `feat(serde)` — full `Serialize` + `Deserialize` integration | Large | — |
+| #23 | `feat(errors)` — recoverable parsing + multi-error collection | Large | — |
+
+`#66` was discovered by the new `roundtrip` fuzz target (#28).
+
+### 🚧 Remaining — P2 / P3
+
+- #29 `feat(emit)` — full quote-style preservation on round-trip
+- #30 `feat(types)` — construct `!!omap` / `!!pairs` / `!!set` as distinct types
+- #31 `perf(scanner)` — trim plain scalars in place instead of re-allocating
+- #32 `perf(scanner)` — fixed-size array in space-indentation detection
+- #33 `reliability(composer)` — short-circuit complexity calc when limit is `usize::MAX`
+- #34 `refactor(resolver)` — delete dead `implicit_resolvers` (P3; unblocks #22)
+
+### Release checklist
+
+- [ ] All milestone issues closed or moved to the v1.2.0 milestone
+- [ ] Version bump `1.0.x` → `1.1.0` (`Cargo.toml` **and** `src/version.rs`)
+- [ ] `CHANGELOG.md` entry for 1.1.0
+- [ ] Tag + `release.yml` publish (`GitVersion.yml` drives semver)
 
 ## Priority 1: YAML 1.2 Specification Compliance 🎯
 
@@ -239,7 +283,7 @@ This roadmap outlines the planned improvements and enhancements for rust-yaml, f
 ### 5.4 Testing
 
 - [ ] Achieve >90% code coverage
-- [ ] Add fuzzing tests
+- [x] Add fuzzing tests (cargo-fuzz harness in `fuzz/`: `load_str`, `load_str_strict`, `roundtrip` — #28)
 - [ ] Implement property-based testing
 - [x] Add YAML test suite compliance tests (735/735 against `yaml/yaml-test-suite` `data-2022-01-17`; harness in `yaml-test-suite/`, run via `make test-yaml-suite`)
 - [ ] Create integration tests with popular frameworks
@@ -347,5 +391,5 @@ Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ---
 
-_Last updated: 2026-05-18_
-_Next review: 2026-07-18_
+_Last updated: 2026-05-22_
+_Next review: 2026-07-22_

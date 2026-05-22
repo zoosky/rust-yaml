@@ -58,6 +58,8 @@ exclude = [
   # Documentation and community files
   "docs/",
   "lcov.info",
+  # Fuzzing harness — dev-only standalone crate
+  "fuzz/",
   # Build artifacts and caches
   "target/",
   # Test files (tests/ should be included for cargo test)
@@ -71,6 +73,9 @@ exclude = [
 
 [workspace]
 members = ["yaml-test-suite"]
+# The fuzz harness is a standalone crate with its own `[workspace]`; exclude
+# it explicitly so root cargo commands never try to claim it as a member.
+exclude = ["fuzz"]
 
 [package.metadata.docs.rs]
 # Build docs with all features on docs.rs

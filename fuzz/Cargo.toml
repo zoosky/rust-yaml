@@ -1,0 +1,40 @@
+[package]
+name = "rust-yaml-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+# Standalone workspace: keeps the fuzz crate independent of the parent
+# `rust-yaml` workspace, so `cargo build` / `cargo test` / `cargo deny` at the
+# repo root never compile it. It is built only via `cargo +nightly fuzz`.
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.rust-yaml]
+path = ".."
+
+[[bin]]
+name = "load_str"
+path = "fuzz_targets/load_str.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "load_str_strict"
+path = "fuzz_targets/load_str_strict.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "roundtrip"
+path = "fuzz_targets/roundtrip.rs"
+test = false
+doc = false
+bench = false

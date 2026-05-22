@@ -42,31 +42,47 @@ impl ErrorContext {
         self
     }
 
-    /// Create error context from input text and position
+    /// Create error context from input text and position.
+    ///
+    /// Only the `context_lines`-line window around `position` is materialized.
+    /// The byte index in `position` locates the error line directly, so the
+    /// cost is proportional to that window — not to the size of the whole
+    /// input, which previously made every error an O(n) scan + allocation of
+    /// the entire line list (#27).
     pub fn from_input(input: &str, position: &Position, context_lines: usize) -> Self {
-        let lines: Vec<&str> = input.lines().collect();
         let line_index = position.line.saturating_sub(1);
 
-        let line_content = lines
-            .get(line_index)
-            .map(|s| s.to_string())
-            .unwrap_or_else(|| "<EOF>".to_string());
-
-        let mut surrounding_lines = Vec::new();
-
-        // Add context lines before
-        let start = line_index.saturating_sub(context_lines);
-        for i in start..line_index {
-            if let Some(line) = lines.get(i) {
-                surrounding_lines.push((i + 1, line.to_string()));
+        // Walk back from the error's byte offset to the start of the window's
+        // first line, scanning at most `context_lines + 1` lines.
+        let clamped_index = position.index.min(input.len());
+        let mut window_start = input[..clamped_index].rfind('\n').map_or(0, |nl| nl + 1);
+        let lines_before = context_lines.min(line_index);
+        for _ in 0..lines_before {
+            if window_start == 0 {
+                break;
             }
+            window_start = input[..window_start - 1].rfind('\n').map_or(0, |nl| nl + 1);
         }
 
-        // Add context lines after
-        let end = (line_index + context_lines + 1).min(lines.len());
-        for i in (line_index + 1)..end {
-            if let Some(line) = lines.get(i) {
-                surrounding_lines.push((i + 1, line.to_string()));
+        // `lines()` over the suffix yields the window in document order and
+        // preserves the original `input.lines()` semantics exactly (CRLF
+        // handling, and no trailing empty line after a final newline).
+        let window: Vec<&str> = input[window_start..]
+            .lines()
+            .take(lines_before + 1 + context_lines)
+            .collect();
+
+        let line_content = window
+            .get(lines_before)
+            .map(|s| (*s).to_string())
+            .unwrap_or_else(|| "<EOF>".to_string());
+
+        // 1-based document line number of the window's first line.
+        let first_line_number = line_index - lines_before + 1;
+        let mut surrounding_lines = Vec::new();
+        for (offset, line) in window.iter().enumerate() {
+            if offset != lines_before {
+                surrounding_lines.push((first_line_number + offset, (*line).to_string()));
             }
         }
 
@@ -693,5 +709,60 @@ mod tests {
         assert!(display.contains("line 5"));
         assert!(display.contains("column 12"));
         assert!(display.contains("unexpected character"));
+    }
+
+    // Characterization tests for `ErrorContext::from_input` (#27): they pin
+    // the extracted line + surrounding context so the O(n)->O(context-window)
+    // refactor stays behavior-identical.
+
+    #[test]
+    fn from_input_extracts_error_line_and_context() {
+        let input = "line one\nline two\nline three\nline four\nline five\n";
+        // Position at the start of "line three" (line 3).
+        let pos = Position::new().advance_str("line one\nline two\n");
+        let ctx = ErrorContext::from_input(input, &pos, 1);
+
+        assert_eq!(ctx.line_content, "line three");
+        assert_eq!(
+            ctx.surrounding_lines,
+            vec![(2, "line two".to_string()), (4, "line four".to_string())]
+        );
+    }
+
+    #[test]
+    fn from_input_handles_first_line_without_underflow() {
+        let input = "first\nsecond\nthird\n";
+        let pos = Position::new(); // line 1, index 0
+        let ctx = ErrorContext::from_input(input, &pos, 2);
+
+        assert_eq!(ctx.line_content, "first");
+        assert_eq!(
+            ctx.surrounding_lines,
+            vec![(2, "second".to_string()), (3, "third".to_string())]
+        );
+    }
+
+    #[test]
+    fn from_input_reports_eof_past_last_line() {
+        let input = "alpha\nbeta\n";
+        // One line past the content (line 3 of a 2-line document).
+        let pos = Position::new().advance_str("alpha\nbeta\n");
+        let ctx = ErrorContext::from_input(input, &pos, 1);
+
+        assert_eq!(ctx.line_content, "<EOF>");
+    }
+
+    #[test]
+    fn from_input_handles_crlf_line_endings() {
+        let input = "aaa\r\nbbb\r\nccc\r\n";
+        // Start of "bbb" (line 2).
+        let pos = Position::new().advance_str("aaa\r\n");
+        let ctx = ErrorContext::from_input(input, &pos, 1);
+
+        assert_eq!(ctx.line_content, "bbb");
+        assert_eq!(
+            ctx.surrounding_lines,
+            vec![(1, "aaa".to_string()), (3, "ccc".to_string())]
+        );
     }
 }

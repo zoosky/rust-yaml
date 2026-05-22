@@ -83,7 +83,7 @@ This roadmap outlines the planned improvements and enhancements for rust-yaml, f
 
 Granular delivery is tracked in the GitHub
 [v1.1.0 milestone](https://github.com/elioetibr/rust-yaml/milestone/2).
-Status as of 2026-05-22 — **6 of 16 issues implemented**.
+Status as of 2026-05-22 — **8 of 15 issues implemented**.
 
 ### ✅ Implemented — PR #67 (open, awaiting merge)
 
@@ -95,17 +95,20 @@ Status as of 2026-05-22 — **6 of 16 issues implemented**.
 | #26 | `perf(scanner)` — drop the `char_indices` side table + O(n) directive resets |
 | #27 | `perf(error)` — build error context from a line window, not all lines |
 | #28 | `test(fuzz)` — cargo-fuzz harness (`load_str`, `load_str_strict`, `roundtrip`) |
+| #66 | `fix(scanner)` — numeric mapping key parsed as a bare scalar |
+| #22 | `fix(resolver)` — implicit hex/octal/binary ints + dotted inf/nan |
+
+`#66` was discovered by the new `roundtrip` fuzz target (#28).
 
 ### 🚧 Remaining — P1
 
-| Issue | Change | Effort | Blocked by |
-|-------|--------|--------|------------|
-| #66 | `fix(parser)` — numeric mapping key parsed as a bare scalar | Medium | — |
-| #22 | `fix(resolver)` — implicit hex/octal/binary integers + float forms | Medium | #34 |
-| #21 | `feat(serde)` — full `Serialize` + `Deserialize` integration | Large | — |
-| #23 | `feat(errors)` — recoverable parsing + multi-error collection | Large | — |
+| Issue | Change | Effort |
+|-------|--------|--------|
+| #21 | `feat(serde)` — full `Serialize` + `Deserialize` integration | Large (~1–2 wk) |
+| #23 | `feat(errors)` — recoverable parsing + multi-error collection | Large (~2 wk) |
 
-`#66` was discovered by the new `roundtrip` fuzz target (#28).
+Both are non-breaking (#23 via an additive constructor — see the issue);
+each needs a dedicated multi-session effort.
 
 ### 🚧 Remaining — P2 / P3
 
@@ -114,7 +117,10 @@ Status as of 2026-05-22 — **6 of 16 issues implemented**.
 - #31 `perf(scanner)` — trim plain scalars in place instead of re-allocating
 - #32 `perf(scanner)` — fixed-size array in space-indentation detection
 - #33 `reliability(composer)` — short-circuit complexity calc when limit is `usize::MAX`
-- #34 `refactor(resolver)` — delete dead `implicit_resolvers` (P3; unblocks #22)
+
+Issue #34 (`refactor(resolver)` — delete dead `implicit_resolvers`) was moved
+to the **v2.0.0** milestone: removing it necessarily breaks the public
+`add_implicit_resolver` API.
 
 ### Release checklist
 

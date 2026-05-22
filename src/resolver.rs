@@ -64,12 +64,30 @@ pub fn resolve_plain_scalar(value: &str, version: YamlVersion) -> PlainScalarTyp
         return PlainScalarType::Null;
     }
 
+    // Decimal integers.
     if let Ok(i) = value.parse::<i64>() {
         return PlainScalarType::Int(i);
     }
 
-    if let Ok(f) = value.parse::<f64>() {
+    // Hex / octal / binary integers. Mirrors the `!!int` tag constructor
+    // (`tag.rs::construct_int`) so implicit and explicit typing agree (#22).
+    if let Some(i) = resolve_radix_int(value) {
+        return PlainScalarType::Int(i);
+    }
+
+    // §10.2 float infinity / NaN: only the dotted spellings (`.inf`,
+    // `.nan`, with an optional sign on `.inf`) are YAML 1.2 floats (#22).
+    if let Some(f) = resolve_inf_nan(value) {
         return PlainScalarType::Float(f);
+    }
+
+    // Finite floats. The digit guard stops Rust's `f64` parser from
+    // accepting the bare `inf` / `infinity` / `nan` words, which YAML 1.2
+    // does not recognize — those fall through to a string.
+    if value.bytes().any(|b| b.is_ascii_digit()) {
+        if let Ok(f) = value.parse::<f64>() {
+            return PlainScalarType::Float(f);
+        }
     }
 
     // YAML 1.1 §10.3.4: bare `=` is the `tag:yaml.org,2002:value`
@@ -87,6 +105,47 @@ pub fn resolve_plain_scalar(value: &str, version: YamlVersion) -> PlainScalarTyp
         "yes" | "on" if version == YamlVersion::V1_1 => PlainScalarType::Bool(true),
         "no" | "off" if version == YamlVersion::V1_1 => PlainScalarType::Bool(false),
         _ => PlainScalarType::Str,
+    }
+}
+
+/// Parse a hex (`0x`), octal (`0o`), or binary (`0b`) integer literal.
+///
+/// Accepts the upper- and lower-case prefix forms, mirroring the `!!int`
+/// tag constructor. Returns `None` for any other input, or when the digits
+/// are missing or invalid for the radix.
+fn resolve_radix_int(value: &str) -> Option<i64> {
+    let (radix, digits) = if let Some(d) = value
+        .strip_prefix("0x")
+        .or_else(|| value.strip_prefix("0X"))
+    {
+        (16, d)
+    } else if let Some(d) = value
+        .strip_prefix("0o")
+        .or_else(|| value.strip_prefix("0O"))
+    {
+        (8, d)
+    } else if let Some(d) = value
+        .strip_prefix("0b")
+        .or_else(|| value.strip_prefix("0B"))
+    {
+        (2, d)
+    } else {
+        return None;
+    };
+    if digits.is_empty() {
+        return None;
+    }
+    i64::from_str_radix(digits, radix).ok()
+}
+
+/// Resolve the YAML 1.2 §10.2 float infinity / NaN spellings. The leading
+/// dot is mandatory; `.inf` takes an optional sign, `.nan` does not.
+fn resolve_inf_nan(value: &str) -> Option<f64> {
+    match value {
+        ".inf" | ".Inf" | ".INF" | "+.inf" | "+.Inf" | "+.INF" => Some(f64::INFINITY),
+        "-.inf" | "-.Inf" | "-.INF" => Some(f64::NEG_INFINITY),
+        ".nan" | ".NaN" | ".NAN" => Some(f64::NAN),
+        _ => None,
     }
 }
 
@@ -313,6 +372,70 @@ mod tests {
                 resolve_plain_scalar(s, YamlVersion::V1_1),
                 PlainScalarType::Str,
                 "{s:?} should fall through to Str — only bare `=` is the value tag"
+            );
+        }
+    }
+
+    #[test]
+    fn plain_scalar_hex_octal_binary_int() {
+        // YAML 1.2 Core `0x`/`0o` plus the `0b` binary form (#22).
+        assert_eq!(
+            resolve_plain_scalar("0xFF", YamlVersion::V1_2),
+            PlainScalarType::Int(255)
+        );
+        assert_eq!(
+            resolve_plain_scalar("0xff", YamlVersion::V1_2),
+            PlainScalarType::Int(255)
+        );
+        assert_eq!(
+            resolve_plain_scalar("0o17", YamlVersion::V1_2),
+            PlainScalarType::Int(15)
+        );
+        assert_eq!(
+            resolve_plain_scalar("0b101", YamlVersion::V1_2),
+            PlainScalarType::Int(5)
+        );
+    }
+
+    #[test]
+    fn plain_scalar_malformed_radix_int_is_string() {
+        // A recognized prefix with no / invalid digits is not an integer.
+        for s in ["0x", "0o8", "0b102", "0xZZ"] {
+            assert_eq!(
+                resolve_plain_scalar(s, YamlVersion::V1_2),
+                PlainScalarType::Str,
+                "{s:?} should fall through to Str"
+            );
+        }
+    }
+
+    #[test]
+    fn plain_scalar_dotted_inf_nan_are_floats() {
+        // §10.2: only the dotted spellings are YAML 1.2 floats (#22).
+        assert_eq!(
+            resolve_plain_scalar(".inf", YamlVersion::V1_2),
+            PlainScalarType::Float(f64::INFINITY)
+        );
+        assert_eq!(
+            resolve_plain_scalar("-.inf", YamlVersion::V1_2),
+            PlainScalarType::Float(f64::NEG_INFINITY)
+        );
+        assert!(matches!(
+            resolve_plain_scalar(".nan", YamlVersion::V1_2),
+            PlainScalarType::Float(f) if f.is_nan()
+        ));
+    }
+
+    #[test]
+    fn plain_scalar_bare_inf_nan_are_strings() {
+        // Bare `inf`/`nan` (no leading dot) are NOT YAML 1.2 floats — they
+        // must stay strings, even though Rust's f64 parser would accept
+        // them (#22).
+        for s in ["inf", "nan", "Inf", "NaN", "infinity"] {
+            assert_eq!(
+                resolve_plain_scalar(s, YamlVersion::V1_2),
+                PlainScalarType::Str,
+                "{s:?} should fall through to Str"
             );
         }
     }

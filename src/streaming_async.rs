@@ -297,11 +297,25 @@ pub mod mmap {
     }
 
     impl MmapYamlReader {
-        /// Create a new memory-mapped reader
+        /// Create a new memory-mapped reader for the file at `path`.
+        ///
+        /// # Warning
+        ///
+        /// Memory mapping ties the process to the file's backing storage for
+        /// the lifetime of the reader. If the file is **truncated or modified
+        /// by another process** while mapped, touching the now-invalid pages
+        /// raises `SIGBUS` on Linux/macOS — an unrecoverable signal that
+        /// terminates the process.
+        ///
+        /// Only use `MmapYamlReader` with **trusted, stable files** that no
+        /// other process will modify concurrently (a TOCTOU hazard). For
+        /// untrusted or volatile inputs, read the file into memory instead.
         pub fn new<P: AsRef<Path>>(path: P) -> Result<Self> {
             let file = File::open(path)?;
-            // Note: Using memory mapping which is inherently unsafe but contained
-            // This is acceptable for file I/O in controlled environments
+            // SAFETY: `MmapOptions::map` is unsafe because the mapped region
+            // is invalidated if the underlying file changes while mapped (see
+            // the SIGBUS note above). The caller contract requires a stable,
+            // trusted file; given that, this read-only mapping is sound.
             #[allow(unsafe_code)]
             let mmap = unsafe { MmapOptions::new().map(&file)? };
 
@@ -318,17 +332,50 @@ pub mod mmap {
             })
         }
 
-        /// Read a chunk from current position
-        pub fn read_chunk(&mut self, size: usize) -> Option<&str> {
+        /// Read a chunk from the current position, propagating UTF-8 errors.
+        ///
+        /// Returns `Ok(None)` at end of input, `Ok(Some(chunk))` for a valid
+        /// chunk of text, and `Err(..)` when the file holds invalid UTF-8.
+        /// This is the error-propagating counterpart of `read_chunk`, which
+        /// reports a malformed file as `None`, indistinguishable from EOF.
+        ///
+        /// The returned chunk always ends on a UTF-8 character boundary: a
+        /// multi-byte sequence straddling `size` is never split, so a valid
+        /// file is read to completion rather than silently truncated. The
+        /// chunk may therefore be a few bytes longer than `size` (#25).
+        pub fn try_read_chunk(&mut self, size: usize) -> Result<Option<&str>> {
             if self.position >= self.mmap.len() {
-                return None;
+                return Ok(None);
             }
 
-            let end = (self.position + size).min(self.mmap.len());
-            let chunk = &self.mmap[self.position..end];
-            self.position = end;
+            let mut end = (self.position + size).min(self.mmap.len());
+            // Walk `end` past any UTF-8 continuation bytes (0b10xxxxxx) so the
+            // chunk stops on a character boundary. This keeps the chunk valid
+            // UTF-8 and guarantees forward progress even when `size` is
+            // smaller than the next character.
+            while end < self.mmap.len() && (self.mmap[end] & 0xC0) == 0x80 {
+                end += 1;
+            }
 
-            std::str::from_utf8(chunk).ok()
+            let chunk = &self.mmap[self.position..end];
+            let text = std::str::from_utf8(chunk).map_err(|e| {
+                crate::Error::construction(
+                    crate::Position::new(),
+                    format!("UTF-8 conversion failed: {}", e),
+                )
+            })?;
+            self.position = end;
+            Ok(Some(text))
+        }
+
+        /// Read a chunk from the current position.
+        ///
+        /// Returns `None` at end of input. Like `try_read_chunk`, the chunk
+        /// never splits a multi-byte UTF-8 sequence. A `None` cannot be told
+        /// apart from a file containing invalid UTF-8 — prefer
+        /// `try_read_chunk` when that distinction matters (#25).
+        pub fn read_chunk(&mut self, size: usize) -> Option<&str> {
+            self.try_read_chunk(size).ok().flatten()
         }
 
         /// Reset position to beginning
@@ -423,5 +470,49 @@ mod mmap_tests {
         reader.reset();
         let chunk = reader.read_chunk(10).unwrap();
         assert_eq!(chunk, "key: value");
+    }
+
+    /// Regression for #25. "€" is 3 bytes (E2 82 AC). A chunk size landing
+    /// inside that sequence must not silently truncate a valid file — the
+    /// chunk extends to the next UTF-8 character boundary instead.
+    #[test]
+    fn read_chunk_does_not_split_multibyte_utf8() {
+        let mut file = NamedTempFile::new().unwrap();
+        file.write_all("ab€cd".as_bytes()).unwrap();
+        file.flush().unwrap();
+
+        let mut reader = MmapYamlReader::new(file.path()).unwrap();
+        let chunk = reader
+            .read_chunk(3)
+            .expect("a boundary inside a multi-byte char must not yield None");
+        assert_eq!(chunk, "ab€");
+    }
+
+    /// Regression for #25. A genuinely malformed file must surface as `Err`,
+    /// distinct from the `Ok(None)` that signals end of input.
+    #[test]
+    fn try_read_chunk_propagates_invalid_utf8() {
+        let mut file = NamedTempFile::new().unwrap();
+        file.write_all(&[0xFF, 0xFE, 0xFD]).unwrap();
+        file.flush().unwrap();
+
+        let mut reader = MmapYamlReader::new(file.path()).unwrap();
+        assert!(
+            reader.try_read_chunk(8).is_err(),
+            "invalid UTF-8 must be reported as an error, not as EOF"
+        );
+    }
+
+    /// Regression for #25. End of input is `Ok(None)` — never confused with
+    /// the `Err` returned for malformed bytes.
+    #[test]
+    fn try_read_chunk_signals_eof_with_ok_none() {
+        let mut file = NamedTempFile::new().unwrap();
+        file.write_all(b"hello").unwrap();
+        file.flush().unwrap();
+
+        let mut reader = MmapYamlReader::new(file.path()).unwrap();
+        assert_eq!(reader.try_read_chunk(8).unwrap(), Some("hello"));
+        assert_eq!(reader.try_read_chunk(8).unwrap(), None);
     }
 }

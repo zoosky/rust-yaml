@@ -27,6 +27,10 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  # cargo-fuzz is installed as a prebuilt musl binary, so it auto-detects a
+  # musl target — which is not installed and is incompatible with the ASan
+  # sanitizer. Pin the host GNU triple for every fuzz invocation.
+  FUZZ_TRIPLE: x86_64-unknown-linux-gnu
 
 jobs:
   # Fast compile check on every PR that touches the harness or the library —
@@ -49,7 +53,7 @@ jobs:
           tool: cargo-fuzz
 
       - name: Build all fuzz targets
-        run: cargo +nightly fuzz build
+        run: cargo +nightly fuzz build --target "$FUZZ_TRIPLE"
 
   # Scheduled / manual fuzzing run. load_str and load_str_strict are gating;
   # roundtrip is non-blocking until #66 (numeric mapping key) is fixed.
@@ -75,14 +79,14 @@ jobs:
           tool: cargo-fuzz
 
       - name: Fuzz load_str
-        run: cargo +nightly fuzz run load_str -- -max_total_time="$FUZZ_SECONDS"
+        run: cargo +nightly fuzz run load_str --target "$FUZZ_TRIPLE" -- -max_total_time="$FUZZ_SECONDS"
 
       - name: Fuzz load_str_strict
-        run: cargo +nightly fuzz run load_str_strict -- -max_total_time="$FUZZ_SECONDS"
+        run: cargo +nightly fuzz run load_str_strict --target "$FUZZ_TRIPLE" -- -max_total_time="$FUZZ_SECONDS"
 
       - name: Fuzz roundtrip (non-blocking — tracks #66)
         continue-on-error: true
-        run: cargo +nightly fuzz run roundtrip -- -max_total_time="$FUZZ_SECONDS"
+        run: cargo +nightly fuzz run roundtrip --target "$FUZZ_TRIPLE" -- -max_total_time="$FUZZ_SECONDS"
 
       - name: Upload crash artifacts
         if: always()

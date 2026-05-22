@@ -100,10 +100,9 @@ pub struct BasicScanner {
     indent_samples: Vec<(usize, bool)>, // (size, is_tabs)
     previous_indent_level: usize,       // Track the previous indentation for style detection
     // Performance optimizations
-    buffer: String,                   // Reusable string buffer for token values
-    char_cache: Vec<char>,            // Cached characters for faster access
-    char_indices: Vec<(usize, char)>, // Cached character indices for O(1) lookups
-    current_char_index: usize,        // Current index in char_cache
+    buffer: String,            // Reusable string buffer for token values
+    char_cache: Vec<char>,     // Cached characters for faster access
+    current_char_index: usize, // Current index in char_cache
     profiler: Option<crate::profiling::YamlProfiler>, // Optional profiling
     // Error tracking
     scanning_error: Option<Error>, // Store scanning errors for later retrieval
@@ -131,7 +130,6 @@ impl BasicScanner {
     /// Create a new scanner with custom resource limits
     pub fn with_limits(input: String, limits: Limits) -> Self {
         let char_cache: Vec<char> = input.chars().collect();
-        let char_indices: Vec<(usize, char)> = input.char_indices().collect();
         let current_char = char_cache.first().copied();
 
         // Track document size for resource limits
@@ -156,7 +154,6 @@ impl BasicScanner {
                 previous_indent_level: 0,
                 buffer: String::new(),
                 char_cache: Vec::new(),
-                char_indices: Vec::new(),
                 current_char_index: 0,
                 profiler: None,
                 scanning_error: Some(e),
@@ -186,7 +183,6 @@ impl BasicScanner {
             previous_indent_level: 0,
             buffer: String::with_capacity(64), // Pre-allocate buffer
             char_cache,
-            char_indices,
             current_char_index: 0,
             profiler: std::env::var("RUST_YAML_PROFILE")
                 .ok()
@@ -1274,6 +1270,8 @@ impl BasicScanner {
 
         let start_pos = self.position;
         let saved_position = self.position;
+        let saved_char = self.current_char;
+        let saved_char_index = self.current_char_index;
         self.advance(); // Skip '%'
 
         // Check for "YAML"
@@ -1372,20 +1370,13 @@ impl BasicScanner {
                 self.position,
             )))
         } else {
-            // Not a YAML directive, reset position
+            // Not a YAML directive: restore the exact pre-`%` scanner state
+            // in O(1). The previous code linear-scanned a char_indices side
+            // table; saving the two cursor fields is both faster and lets
+            // that table be dropped entirely (#26).
             self.position = saved_position;
-            // Properly reset current_char based on saved position
-            self.current_char = self
-                .char_indices
-                .iter()
-                .find(|(i, _)| *i == saved_position.index)
-                .map(|(_, ch)| *ch);
-            // Reset the current_char_index
-            self.current_char_index = self
-                .char_indices
-                .iter()
-                .position(|(i, _)| *i == saved_position.index)
-                .unwrap_or(0);
+            self.current_char = saved_char;
+            self.current_char_index = saved_char_index;
             Ok(None)
         }
     }
@@ -1398,6 +1389,8 @@ impl BasicScanner {
 
         let start_pos = self.position;
         let saved_position = self.position;
+        let saved_char = self.current_char;
+        let saved_char_index = self.current_char_index;
         self.advance(); // Skip '%'
 
         // Check for "TAG"
@@ -1428,20 +1421,11 @@ impl BasicScanner {
                 self.position,
             )))
         } else {
-            // Reset position if not a TAG directive
+            // Not a TAG directive: restore the exact pre-`%` scanner state
+            // in O(1) (see the matching note in scan_yaml_directive, #26).
             self.position = saved_position;
-            // Properly reset current_char based on saved position
-            self.current_char = self
-                .char_indices
-                .iter()
-                .find(|(i, _)| *i == saved_position.index)
-                .map(|(_, ch)| *ch);
-            // Reset the current_char_index
-            self.current_char_index = self
-                .char_indices
-                .iter()
-                .position(|(i, _)| *i == saved_position.index)
-                .unwrap_or(0);
+            self.current_char = saved_char;
+            self.current_char_index = saved_char_index;
             Ok(None)
         }
     }

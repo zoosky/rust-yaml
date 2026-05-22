@@ -98,6 +98,73 @@ fn test_max_anchor_limit() {
 }
 
 #[test]
+fn test_anchor_name_length_limit() {
+    // A single anchor whose name exceeds max_string_length must be rejected
+    // before it is materialized as a heap-allocated String / HashMap key.
+    // Without a cap an attacker exhausts memory with one giant anchor name,
+    // long before the per-anchor *count* limit could ever fire (issue #24).
+    let huge_name = "a".repeat(70_000); // 70KB name (above strict 64KB limit)
+    let yaml_str = format!("key: &{} value", huge_name);
+
+    let config = YamlConfig {
+        limits: Limits::strict(),
+        loader_type: LoaderType::Safe,
+        ..YamlConfig::default()
+    };
+
+    let yaml = Yaml::with_config(config);
+    let result = yaml.load_str(&yaml_str);
+
+    assert!(
+        result.is_err(),
+        "Expected an oversized anchor name to be rejected"
+    );
+    if let Err(e) = result {
+        let error_str = e.to_string();
+        assert!(
+            error_str.contains("string")
+                || error_str.contains("length")
+                || error_str.contains("limit"),
+            "Expected string-length limit error, got: {}",
+            error_str
+        );
+    }
+}
+
+#[test]
+fn test_alias_name_length_limit() {
+    // The same unbounded-allocation hole exists for alias names (*name), which
+    // share scan_identifier with anchors. Cap both (issue #24).
+    let huge_name = "a".repeat(70_000);
+    let yaml_str = format!("ref: *{}", huge_name);
+
+    let config = YamlConfig {
+        limits: Limits::strict(),
+        loader_type: LoaderType::Safe,
+        ..YamlConfig::default()
+    };
+
+    let yaml = Yaml::with_config(config);
+    let result = yaml.load_str(&yaml_str);
+
+    assert!(
+        result.is_err(),
+        "Expected an oversized alias name to be rejected"
+    );
+    if let Err(e) = result {
+        let error_str = e.to_string();
+        assert!(
+            error_str.contains("string")
+                || error_str.contains("length")
+                || error_str.contains("limit")
+                || error_str.contains("alias"),
+            "Expected string-length limit error, got: {}",
+            error_str
+        );
+    }
+}
+
+#[test]
 fn test_max_document_size_limit() {
     // Create a document that exceeds size limit
     let large_doc = "x: ".to_string() + &"y".repeat(2_000_000); // 2MB document

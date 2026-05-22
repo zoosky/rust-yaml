@@ -637,24 +637,6 @@ impl From<IndexMap<Self, Self>> for Value {
     }
 }
 
-#[cfg(feature = "serde")]
-impl serde::Serialize for Value {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        match self {
-            Self::Null => serializer.serialize_none(),
-            Self::Bool(b) => serializer.serialize_bool(*b),
-            Self::Int(i) => serializer.serialize_i64(*i),
-            Self::Float(f) => serializer.serialize_f64(*f),
-            Self::String(s) => serializer.serialize_str(s),
-            Self::Sequence(seq) => seq.serialize(serializer),
-            Self::Mapping(map) => map.serialize(serializer),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

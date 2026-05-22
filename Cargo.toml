@@ -180,6 +180,9 @@ proptest = "1.2"
 tempfile = "3.8"
 # For async tests
 tokio = { version = "1.40", features = ["macros", "rt", "test-util"] }
+# Reference implementation for parity tests + benchmark comparison.
+# serde_yaml is archived but functional; dev-only.
+serde_yaml = "0.9"
 
 [features]
 # Async/await support

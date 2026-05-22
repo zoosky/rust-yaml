@@ -2522,21 +2522,17 @@ impl BasicScanner {
     }
 
     fn peek_char(&self, offset: isize) -> Option<char> {
-        if offset >= 0 {
-            let target_index = self.current_char_index + offset as usize;
-            if target_index < self.char_cache.len() {
-                Some(self.char_cache[target_index])
-            } else {
-                None
-            }
+        // `unsigned_abs()` yields the magnitude as `usize` and is total — it
+        // is defined even for `isize::MIN`, where `-offset` overflows (panic
+        // in debug, wrapping UB in release). `checked_add`/`checked_sub` then
+        // make an out-of-range index a `None` rather than a panic (#20).
+        let magnitude = offset.unsigned_abs();
+        let target_index = if offset >= 0 {
+            self.current_char_index.checked_add(magnitude)?
         } else {
-            let offset_magnitude = (-offset) as usize;
-            if self.current_char_index >= offset_magnitude {
-                Some(self.char_cache[self.current_char_index - offset_magnitude])
-            } else {
-                None
-            }
-        }
+            self.current_char_index.checked_sub(magnitude)?
+        };
+        self.char_cache.get(target_index).copied()
     }
 
     /// Scan an anchor token (&name)
@@ -3559,6 +3555,26 @@ impl Scanner for BasicScanner {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Regression for #20. peek_char's negative branch must not compute
+    /// `-offset` on `isize::MIN` — that overflows (panic in debug, wrapping
+    /// UB in release). An out-of-range backward offset yields `None`.
+    #[test]
+    fn peek_char_handles_isize_min_without_overflow() {
+        let scanner = BasicScanner::new("abc".to_string());
+        assert_eq!(scanner.peek_char(isize::MIN), None);
+    }
+
+    /// Regression for #20. The public `ScalarScanner::peek_char` takes a
+    /// `usize`; the `BasicScanner` bridge casts it to `isize`. A `usize`
+    /// above `isize::MAX` wraps to `isize::MIN` — it must still yield `None`,
+    /// never a panic.
+    #[test]
+    fn scalar_scanner_peek_char_survives_huge_usize_offset() {
+        let scanner = BasicScanner::new("abc".to_string());
+        let huge = (isize::MAX as usize) + 1; // casts to isize::MIN
+        assert_eq!(ScalarScanner::peek_char(&scanner, huge), None);
+    }
 
     /// Regression for #19. Reaching this constructor with malformed input
     /// must record the scanning error so callers can detect failure via

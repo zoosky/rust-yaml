@@ -2181,6 +2181,15 @@ impl BasicScanner {
                     || (ch == '-' && self.peek_char(1).map_or(false, |c| c.is_ascii_digit())))
                     && self.is_pure_number() =>
                 {
+                    // A numeric scalar can be an implicit mapping key just
+                    // like any other scalar. Open the block mapping before
+                    // the key token so `BlockMappingStart` is emitted —
+                    // every other scalar dispatch arm does this; the number
+                    // arm previously skipped it, so `421: null` parsed as a
+                    // bare scalar instead of a mapping (#66).
+                    if self.flow_level == 0 && self.check_for_mapping_ahead() {
+                        self.maybe_open_block_mapping_for_key()?;
+                    }
                     let token = self.scan_number()?;
                     self.tokens.push(token);
                 }

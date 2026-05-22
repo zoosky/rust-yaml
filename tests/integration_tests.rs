@@ -1013,3 +1013,55 @@ fn test_mapping_keys_after_nested_compact_sequences() {
         serialized
     );
 }
+
+#[test]
+fn numeric_mapping_key_parses_as_mapping() {
+    // Regression for #66 (found by the roundtrip fuzz target): a root-level
+    // block mapping whose key resolves to a number must parse as a mapping,
+    // not collapse to the bare key scalar.
+    let yaml = Yaml::new();
+    let v = yaml
+        .load_str("421: null")
+        .expect("numeric-key mapping should parse");
+
+    assert!(
+        v.is_mapping(),
+        "`421: null` must parse as a mapping, got {v:?}"
+    );
+    assert_eq!(
+        v.get(&Value::Int(421)),
+        Some(&Value::Null),
+        "key 421 should map to null"
+    );
+}
+
+#[test]
+fn nested_numeric_mapping_key_parses_as_mapping() {
+    // The same scanner gap affects numeric keys at any indent, not just root.
+    let yaml = Yaml::new();
+    let v = yaml
+        .load_str("outer:\n  17: hello")
+        .expect("nested numeric-key mapping should parse");
+
+    let inner = v.get(&Value::String("outer".to_string()));
+    assert_eq!(
+        inner.and_then(|m| m.get(&Value::Int(17))),
+        Some(&Value::String("hello".to_string())),
+        "nested key 17 should map to \"hello\", got {v:?}"
+    );
+}
+
+#[test]
+fn numeric_mapping_key_round_trips() {
+    // dump -> load must reproduce a numeric-key mapping (the invariant the
+    // roundtrip fuzz target flagged for #66).
+    let yaml = Yaml::new();
+    let v = yaml.load_str("421: null").expect("parse");
+    let dumped = yaml.dump_str(&v).expect("dump");
+    let reloaded = yaml.load_str(&dumped).expect("reload");
+    assert!(
+        reloaded.is_mapping(),
+        "round-trip must stay a mapping, got {reloaded:?}"
+    );
+    assert_eq!(v, reloaded, "numeric-key mapping must round-trip");
+}

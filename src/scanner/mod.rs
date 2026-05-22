@@ -2594,6 +2594,11 @@ impl BasicScanner {
                 break;
             }
             identifier.push(ch);
+            // Cap heap growth before an attacker-controlled anchor/alias name
+            // can exhaust memory: bail the moment it exceeds max_string_length,
+            // rather than after the full String is materialized (#24).
+            self.resource_tracker
+                .check_string_length(&self.limits, identifier.len())?;
             self.advance();
         }
         Ok(identifier)

@@ -178,3 +178,25 @@ realistic inputs.
   `from_reader_streaming` if a real perf case arises.
 - Optional `serde_yaml`-style `Mapping` new type if downstream code reaches
   for it directly. Deferred until requested.
+- **Non-unit enum variant format divergence from `serde_yaml`.** `serde_yaml`
+  0.9 emits and consumes tuple / struct variants as YAML-tagged values
+  (`!Variant\n- 1\n- 2\n`); this crate uses the single-entry-mapping form
+  (`Variant:\n  - 1\n  - 2\n`). Unit variants are compatible; non-unit
+  variants are not bidirectionally portable. The mapping form is the
+  natural fit for our `Value` data model and avoids a leaky abstraction
+  through the existing tag system. A follow-up could accept both forms on
+  input (and pick a default on output) if drop-in migration from
+  `serde_yaml` for codebases with non-unit enum variants becomes a
+  requirement.
+- **`src/serde_integration/ser.rs` size (475 lines)** exceeds the project's
+  ~300-line ceiling. The file is one coherent unit (`ValueSerializer` + 4
+  builder structs that the `Serializer` trait associates types with);
+  splitting requires re-exports and cross-module visibility. A mechanical
+  split into `ser.rs` (the `Serializer` impl) + `ser_builders.rs` (the
+  builder structs) is a reasonable cleanup whenever the area is touched
+  next.
+- **Load performance.** Initial microbenchmarks show `rust_yaml::from_str`
+  is roughly 2× slower than `serde_yaml::from_str` on small/medium config
+  inputs; dump performance is comparable. #39 (`feat(serde): derive macros
+  - serde benchmarks`) is the right place to land profiling-driven
+  improvements.

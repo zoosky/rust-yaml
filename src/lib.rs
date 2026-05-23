@@ -7,6 +7,19 @@
 //! - Performance: Zero-copy parsing, efficient memory usage
 //! - Reliability: Comprehensive error handling, deterministic behavior
 //! - Maintainability: Clean architecture, extensive testing
+//!
+//! # Serde example
+//!
+//! With the `serde` feature enabled, rust-yaml exposes a `serde_yaml`-compatible
+//! API at the crate root:
+//!
+//! ```ignore
+//! #[derive(serde::Deserialize)]
+//! struct Cfg { name: String }
+//!
+//! let cfg: Cfg = rust_yaml::from_str("name: rust").unwrap();
+//! assert_eq!(cfg.name, "rust");
+//! ```
 
 #![deny(unsafe_code)]
 #![warn(missing_docs)]
@@ -137,6 +150,8 @@ pub use zerocopy::{ScannerStats, TokenPool, ZeroScanner, ZeroString, ZeroToken, 
 
 #[cfg(feature = "serde")]
 pub mod serde_integration;
+#[cfg(feature = "serde")]
+pub use serde_integration::{from_reader, from_slice, from_str, to_string, to_writer};
 
 #[cfg(test)]
 mod tests {

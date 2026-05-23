@@ -4,7 +4,7 @@
 //! `T` into a `Value` via this serializer, then delegate to the existing
 //! `dump_str` pipeline.
 
-use crate::{Error, Value};
+use crate::{Error, Value, Yaml};
 use indexmap::IndexMap;
 use serde::ser::{
     Serialize, SerializeMap, SerializeSeq, SerializeStruct, SerializeStructVariant, SerializeTuple,
@@ -369,6 +369,36 @@ impl SerializeStructVariant for StructVariantBuilder {
     }
 }
 
+use std::io::Write;
+
+/// Serialize `T` to a YAML string.
+///
+/// Source-compatible with `serde_yaml::to_string`.
+///
+/// # Errors
+///
+/// Returns an error if `T`'s `Serialize` impl fails or if YAML emission fails.
+pub fn to_string<T: ?Sized + Serialize>(v: &T) -> Result<String, Error> {
+    let val = v.serialize(ValueSerializer)?;
+    Yaml::new().dump_str(&val)
+}
+
+/// Serialize `T` into the given writer as YAML.
+///
+/// Source-compatible with `serde_yaml::to_writer`.
+///
+/// # Errors
+///
+/// Returns an error if serialization fails or if writing to `w` fails.
+pub fn to_writer<W: Write, T: ?Sized + Serialize>(mut w: W, v: &T) -> Result<(), Error> {
+    let s = to_string(v)?;
+    write_all_or_io_error(&mut w, s.as_bytes())
+}
+
+fn write_all_or_io_error<W: Write>(w: &mut W, bytes: &[u8]) -> Result<(), Error> {
+    w.write_all(bytes).map_err(Error::from)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -471,5 +501,30 @@ mod tests {
             .expect("inner map");
         assert_eq!(inner.get(&Value::String("x".into())), Some(&Value::Int(3)));
         assert_eq!(inner.get(&Value::String("y".into())), Some(&Value::Int(4)));
+    }
+
+    #[test]
+    fn to_string_emits_yaml_for_struct() {
+        #[derive(serde::Serialize)]
+        struct Cfg {
+            name: String,
+            version: u32,
+        }
+        let yaml = to_string(&Cfg {
+            name: "rust".into(),
+            version: 11,
+        })
+        .expect("to_string");
+        assert!(yaml.contains("name: rust"));
+        assert!(yaml.contains("version: 11"));
+    }
+
+    #[test]
+    fn to_writer_writes_same_output_as_to_string() {
+        let v = vec![1i32, 2, 3];
+        let s = to_string(&v).unwrap();
+        let mut buf = Vec::<u8>::new();
+        to_writer(&mut buf, &v).unwrap();
+        assert_eq!(std::str::from_utf8(&buf).unwrap(), s);
     }
 }

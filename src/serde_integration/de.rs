@@ -57,11 +57,43 @@ impl<'de, 'a> Deserializer<'de> for ValueDeserializer<'a> {
         self,
         _name: &'static str,
         _variants: &'static [&'static str],
-        _visitor: V,
+        visitor: V,
     ) -> Result<V::Value, Error> {
-        Err(<Error as de::Error>::custom(
-            "enum deserialization implemented in a later task",
-        ))
+        match self.value {
+            // Unit variant: a bare string naming the variant.
+            Value::String(s) => {
+                let de = de::value::StrDeserializer::<Error>::new(s.as_str());
+                visitor.visit_enum(de)
+            }
+
+            // Tuple / struct / newtype variant: a single-entry mapping whose key
+            // is the variant name and whose value carries the payload.
+            Value::Mapping(map) if map.len() == 1 => {
+                let (k, v) = if let Some(entry) = map.iter().next() {
+                    entry
+                } else {
+                    return Err(<Error as de::Error>::custom(
+                        "internal: len==1 but no entry",
+                    ));
+                };
+                let name = match k {
+                    Value::String(s) => s.as_str(),
+                    _ => {
+                        return Err(<Error as de::Error>::custom(
+                            "enum variant key must be a string",
+                        ));
+                    }
+                };
+                visitor.visit_enum(EnumAccessImpl {
+                    variant: name,
+                    value: v,
+                })
+            }
+
+            other => Err(<Error as de::Error>::custom(format!(
+                "expected enum (string or single-entry mapping), got {other:?}"
+            ))),
+        }
     }
 }
 
@@ -118,6 +150,58 @@ impl<'de, 'a> MapAccess<'de> for MapAccessImpl<'a> {
 
     fn size_hint(&self) -> Option<usize> {
         Some(self.iter.len())
+    }
+}
+
+struct EnumAccessImpl<'a> {
+    variant: &'a str,
+    value: &'a Value,
+}
+
+impl<'de, 'a> serde::de::EnumAccess<'de> for EnumAccessImpl<'a> {
+    type Error = Error;
+    type Variant = VariantAccessImpl<'a>;
+
+    fn variant_seed<V: DeserializeSeed<'de>>(
+        self,
+        seed: V,
+    ) -> Result<(V::Value, Self::Variant), Error> {
+        let de = de::value::StrDeserializer::<Error>::new(self.variant);
+        let name: V::Value = seed.deserialize(de)?;
+        Ok((name, VariantAccessImpl { value: self.value }))
+    }
+}
+
+struct VariantAccessImpl<'a> {
+    value: &'a Value,
+}
+
+impl<'de, 'a> serde::de::VariantAccess<'de> for VariantAccessImpl<'a> {
+    type Error = Error;
+
+    fn unit_variant(self) -> Result<(), Error> {
+        match self.value {
+            Value::Null => Ok(()),
+            _ => Err(<Error as de::Error>::custom(
+                "unit variant must have Null payload",
+            )),
+        }
+    }
+
+    fn newtype_variant_seed<T: DeserializeSeed<'de>>(self, seed: T) -> Result<T::Value, Error> {
+        seed.deserialize(ValueDeserializer::new(self.value))
+    }
+
+    fn tuple_variant<V: Visitor<'de>>(self, _len: usize, visitor: V) -> Result<V::Value, Error> {
+        ValueDeserializer::new(self.value).deserialize_seq(visitor)
+    }
+
+    fn struct_variant<V: Visitor<'de>>(
+        self,
+        _fields: &'static [&'static str],
+        visitor: V,
+    ) -> Result<V::Value, Error> {
+        ValueDeserializer::new(self.value).deserialize_map(visitor)
     }
 }
 
@@ -219,5 +303,41 @@ mod tests {
             from_reader(std::io::Cursor::new(input)).unwrap();
         assert_eq!(from_s, from_b);
         assert_eq!(from_s, from_r);
+    }
+
+    #[test]
+    fn unit_variant_deserializes_from_string() {
+        #[derive(serde::Deserialize, Debug, PartialEq)]
+        enum Color {
+            Red,
+            Green,
+            Blue,
+        }
+        let c: Color = from_str("Red").unwrap();
+        assert_eq!(c, Color::Red);
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn tuple_variant_deserializes_from_tagged_map() {
+        #[derive(serde::Deserialize, Debug, PartialEq)]
+        enum Shape {
+            Circle(f64),
+            Rect(f64, f64),
+        }
+        let c: Shape = from_str("Circle: 1.5\n").unwrap();
+        assert_eq!(c, Shape::Circle(1.5));
+        let r: Shape = from_str("Rect:\n  - 2.0\n  - 3.0\n").unwrap();
+        assert_eq!(r, Shape::Rect(2.0, 3.0));
+    }
+
+    #[test]
+    fn struct_variant_deserializes_from_tagged_map() {
+        #[derive(serde::Deserialize, Debug, PartialEq)]
+        enum Msg {
+            Point { x: i32, y: i32 },
+        }
+        let p: Msg = from_str("Point:\n  x: 1\n  y: 2\n").unwrap();
+        assert_eq!(p, Msg::Point { x: 1, y: 2 });
     }
 }

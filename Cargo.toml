@@ -162,6 +162,11 @@ harness = false
 name = "serde_load"
 required-features = ["serde"]
 
+[[bench]]
+harness = false
+name = "serde_dump"
+required-features = ["serde"]
+
 [dependencies]
 # Base64 encoding/decoding for binary data tags
 base64 = "0.22"

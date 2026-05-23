@@ -83,7 +83,7 @@ This roadmap outlines the planned improvements and enhancements for rust-yaml, f
 
 Granular delivery is tracked in the GitHub
 [v1.1.0 milestone](https://github.com/elioetibr/rust-yaml/milestone/2).
-Status as of 2026-05-22 — **8 of 15 issues implemented**.
+Status as of 2026-05-22 — **9 of 15 issues implemented**.
 
 ### ✅ Implemented — PR #67 (open, awaiting merge)
 
@@ -97,18 +97,24 @@ Status as of 2026-05-22 — **8 of 15 issues implemented**.
 | #28 | `test(fuzz)` — cargo-fuzz harness (`load_str`, `load_str_strict`, `roundtrip`) |
 | #66 | `fix(scanner)` — numeric mapping key parsed as a bare scalar |
 | #22 | `fix(resolver)` — implicit hex/octal/binary ints + dotted inf/nan |
+| #21 | `feat(serde)` — full `Serialize`/`Deserialize` data format + `Value` impls |
 
-`#66` was discovered by the new `roundtrip` fuzz target (#28).
+`#66` was discovered by the new `roundtrip` fuzz target (#28). `#21` ships
+the full serde data format (`from_str`/`from_slice`/`from_reader` /
+`to_string`/`to_writer`) plus `Serialize` / `Deserialize` for `Value`,
+behind the existing `serde` feature. See
+[`SERDE_INTEGRATION_DESIGN.md`](SERDE_INTEGRATION_DESIGN.md) for the
+spec; non-unit enum variants use the single-entry-mapping form rather
+than `serde_yaml`'s tagged form (documented divergence).
 
 ### 🚧 Remaining — P1
 
 | Issue | Change | Effort |
 |-------|--------|--------|
-| #21 | `feat(serde)` — full `Serialize` + `Deserialize` integration | Large (~1–2 wk) |
 | #23 | `feat(errors)` — recoverable parsing + multi-error collection | Large (~2 wk) |
 
-Both are non-breaking (#23 via an additive constructor — see the issue);
-each needs a dedicated multi-session effort.
+`#23` is non-breaking via an additive constructor (see the issue), and
+needs a dedicated multi-session effort.
 
 ### 🚧 Remaining — P2 / P3
 
